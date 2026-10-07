@@ -1913,30 +1913,15 @@ heidenhain_header_row = st.sidebar.number_input(
 
 status_column = "Statut"
 
-id_column = st.sidebar.text_input(
-    "Colonne ID",
-    "ID",
-)
+id_column = "ID"
 
-group_column = st.sidebar.text_input(
-    "Colonne Groupe Produit",
-    "Groupe Produit",
-)
+group_column = "Groupe Produit"
 
-ppc_column = st.sidebar.text_input(
-    "Colonne Prix PPC",
-    "Prix (PPC)",
-)
+ppc_column = "Prix (PPC)"
 
-sav_column = st.sidebar.text_input(
-    "Colonne Prix SAV",
-    "Prix (SAV)",
-)
+sav_column = "Prix (SAV)"
 
-heidenhain_prixHA = st.sidebar.text_input(
-    "Colonne Prix HA",
-    "Prix HA",
-)
+heidenhain_prixHA = "Prix HA"
 
 
 # ==========================================================
