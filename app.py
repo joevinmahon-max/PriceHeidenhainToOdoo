@@ -1357,19 +1357,19 @@ else:
     ):
 
         try:
-                result_bytes, stats = process_heidenhain(
-                    uploaded_file=heidenhain_file,
-                    sheet_name=heidenhain_sheet,
-                    header_row=int(heidenhain_header_row),
-                    data_start_row=int(heidenhain_data_start_row),
-                    status_column=status_column,
-                    id_column=id_column,
-                    output_columns=OUTPUT_COLUMNS,
-                )
-                
-                # Conserver le résultat après le rerun Streamlit
-                st.session_state.result_bytes = result_bytes
-                st.session_state.result_stats = stats
+            result_bytes, stats = process_heidenhain(
+                uploaded_file=heidenhain_file,
+                sheet_name=heidenhain_sheet,
+                header_row=int(heidenhain_header_row),
+                data_start_row=int(heidenhain_data_start_row),
+                status_column=status_column,
+                id_column=id_column,
+                output_columns=OUTPUT_COLUMNS,
+            )
+            
+            # Conserver le résultat après le rerun Streamlit
+            st.session_state.result_bytes = result_bytes
+            st.session_state.result_stats = stats
 
 
             st.success(
