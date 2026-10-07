@@ -1656,12 +1656,26 @@ def process_odoo(
             column=col_price,
         ).value = price
 
-        ws.cell(
-            row=target_row,
-            column=col_barcode,
-        ).value = (
-            f"I {reference}"
-        )
+        # ==================================================
+        # CODE-BARRES
+        # Produit SAV → vide
+        # Produit normal → I + référence
+        # ==================================================
+        
+        if is_sav(reference):
+        
+            ws.cell(
+                row=target_row,
+                column=col_barcode,
+            ).value = ""
+        
+        else:
+        
+            ws.cell(
+                row=target_row,
+                column=col_barcode,
+            ).value = f"I {reference}"
+
 
         ws.cell(
             row=target_row,
