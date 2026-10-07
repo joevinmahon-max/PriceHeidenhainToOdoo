@@ -1510,37 +1510,49 @@ def process_odoo(
             updated += 1
 
         else:
-
-            target_row = (
-                ws.max_row + 1
-            )
-
-            # --------------------------------------------------
-            # Pour une nouvelle ligne :
-            # on copie le style de la dernière ligne.
-            # --------------------------------------------------
-
-            if target_row > (
-                int(odoo_header_row)
-                + 1
-            ):
-
-                template_row = (
-                    target_row - 1
-                )
-
+            # ==================================================
+            # RECHERCHE DU PREMIER EMPLACEMENT VIDE
+            # DANS LA COLONNE "REFERENCE"
+            # ==================================================
+        
+            reference_col = odoo_columns[
+                odoo_reference_column
+            ]
+        
+            target_row = odoo_header_row + 1
+        
+            while ws.cell(
+                row=target_row,
+                column=reference_col,
+            ).value not in (None, ""):
+        
+                target_row += 1
+        
+            # ==================================================
+            # COPIE DU STYLE DE LA LIGNE PRECEDENTE
+            # ==================================================
+        
+            if target_row > odoo_header_row + 1:
+        
+                template_row = target_row - 1
+        
                 copy_row_style(
                     ws,
                     template_row,
                     target_row,
                     ws.max_column,
                 )
-
+        
+            # ==================================================
+            # ENREGISTREMENT DE LA NOUVELLE REFERENCE
+            # ==================================================
+        
             reference_index[
                 normalized_ref
             ] = target_row
-
+        
             created += 1
+
 
         # ==================================================
         # PRIX
