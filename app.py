@@ -1127,7 +1127,7 @@ def process_odoo(
     odoo_category_column,
     odoo_name,
     odoo_brand_description,
-    odoo_supplier_price,
+    odoo_prixHA,
 ):
 
     # ======================================================
@@ -1281,7 +1281,7 @@ def process_odoo(
         odoo_category_column,
         odoo_name,
         odoo_brand_description,
-        odoo_supplier_price,
+        odoo_prixHA,
     ]
 
     odoo_columns = find_columns(
@@ -1400,8 +1400,8 @@ def process_odoo(
         odoo_category_column
     ]
     
-    col_supplier_price = odoo_columns[
-    odoo_supplier_price
+    col_prixHA = odoo_columns[
+    odoo_prixHA
     ]
 
 
@@ -1703,7 +1703,7 @@ def process_odoo(
 
         ws.cell(
         row=target_row,
-        column=col_supplier_price,
+        column=col_prixHA,
         ).value = prixHA
 
 
@@ -2014,7 +2014,7 @@ odoo_category = st.sidebar.text_input(
     "Catégorie de produits/ID",
 )
 
-odoo_supplier_price = st.sidebar.text_input(
+odoo_prixHA = st.sidebar.text_input(
     "Fournisseurs/Prix",
     "Fournisseurs/Prix",
 )
@@ -2163,7 +2163,7 @@ Le traitement va :
                     status_column=status_column,
                     id_column=id_column,
                     output_columns=(
-                        DEFAULT_OUTPUT_COLUMNS
+                        heidenhain_output_columns
                     ),
                 )
             )
@@ -2319,7 +2319,7 @@ else:
         
             odoo_name=odoo_name,
             odoo_brand_description=odoo_brand_description,
-            odoo_supplier_price=odoo_supplier_price,
+            odoo_prixHA=odoo_prixHA,
         )
 
 
