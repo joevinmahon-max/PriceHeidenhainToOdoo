@@ -1,6 +1,14 @@
 # ==========================================================
 # PREPARATION PRIX HEIDENHAIN + MISE EN FORME ODOO
 # JMA
+#
+# ETAPE 1 :
+# - Préparation du fichier Heidenhain
+#
+# ETAPE 2 :
+# - Mise à jour / création des références Odoo
+# - Recherche catégorie optimisée en mémoire
+# - Compatible avec de gros fichiers
 # ==========================================================
 
 import streamlit as st
@@ -35,6 +43,7 @@ DEFAULT_STATE = {
 }
 
 for key, value in DEFAULT_STATE.items():
+
     if key not in st.session_state:
         st.session_state[key] = value
 
@@ -43,7 +52,10 @@ for key, value in DEFAULT_STATE.items():
 # CONSTANTES
 # ==========================================================
 
-STATUS_TO_DUPLICATE = {"VG", "PG"}
+STATUS_TO_DUPLICATE = {
+    "VG",
+    "PG",
+}
 
 DEFAULT_OUTPUT_COLUMNS = [
     "ID",
@@ -61,6 +73,7 @@ DEFAULT_OUTPUT_COLUMNS = [
 # ==========================================================
 
 def normalize(value):
+
     if value is None:
         return ""
 
@@ -68,54 +81,45 @@ def normalize(value):
 
 
 def clean_reference(value):
-    """
-    Nettoie une référence pour les comparaisons.
-    """
+
     return normalize(value)
 
 
 def is_sav(reference):
-    """
-    Détermine si une référence est une référence SAV.
-    """
-    return clean_reference(reference).endswith("_SAV")
 
+    return clean_reference(
+        reference
+    ).endswith("_SAV")
+
+
+# ==========================================================
+# COPIE STYLE
+# ==========================================================
 
 def copy_style_safe(source, target):
-    """
-    Copie uniquement les éléments de style nécessaires.
-
-    On évite les manipulations globales du styles.xml
-    qui peuvent provoquer des réparations Excel.
-    """
 
     try:
-        if source.font:
-            target.font = copy(source.font)
+        target.font = copy(source.font)
     except Exception:
         pass
 
     try:
-        if source.fill:
-            target.fill = copy(source.fill)
+        target.fill = copy(source.fill)
     except Exception:
         pass
 
     try:
-        if source.border:
-            target.border = copy(source.border)
+        target.border = copy(source.border)
     except Exception:
         pass
 
     try:
-        if source.alignment:
-            target.alignment = copy(source.alignment)
+        target.alignment = copy(source.alignment)
     except Exception:
         pass
 
     try:
-        if source.protection:
-            target.protection = copy(source.protection)
+        target.protection = copy(source.protection)
     except Exception:
         pass
 
@@ -125,13 +129,17 @@ def copy_style_safe(source, target):
         pass
 
 
-def copy_row_style(ws, source_row, target_row, max_col):
-    """
-    Copie la mise en forme d'une ligne existante
-    vers une nouvelle ligne.
-    """
+def copy_row_style(
+    ws,
+    source_row,
+    target_row,
+    max_col,
+):
 
-    for col in range(1, max_col + 1):
+    for col in range(
+        1,
+        max_col + 1,
+    ):
 
         source = ws.cell(
             row=source_row,
@@ -148,52 +156,88 @@ def copy_row_style(ws, source_row, target_row, max_col):
             target,
         )
 
-    # Hauteur de ligne
     try:
-        ws.row_dimensions[target_row].height = (
-            ws.row_dimensions[source_row].height
+
+        ws.row_dimensions[
+            target_row
+        ].height = (
+            ws.row_dimensions[
+                source_row
+            ].height
         )
+
     except Exception:
         pass
 
 
-def find_column(ws, header_row, header_name):
-    """
-    Recherche une colonne par son nom.
-    """
+# ==========================================================
+# RECHERCHE COLONNE
+# ==========================================================
 
-    wanted = normalize(header_name)
+def find_column(
+    ws,
+    header_row,
+    header_name,
+):
+
+    wanted = normalize(
+        header_name
+    )
 
     for cell in ws[header_row]:
 
-        if normalize(cell.value) == wanted:
+        if normalize(
+            cell.value
+        ) == wanted:
+
             return cell.column
 
     return None
 
 
-def find_columns(ws, header_row, names):
-    """
-    Recherche plusieurs colonnes.
-    """
+def find_columns(
+    ws,
+    header_row,
+    names,
+):
 
     result = {}
 
-    for name in names:
+    # Une seule lecture de la ligne d'en-têtes
+    headers = {}
 
-        col = find_column(
-            ws,
-            header_row,
-            name,
+    for cell in ws[header_row]:
+
+        value = normalize(
+            cell.value
         )
 
-        if col is not None:
-            result[name] = col
+        if value and value not in headers:
+
+            headers[value] = cell.column
+
+    for name in names:
+
+        normalized_name = normalize(
+            name
+        )
+
+        if normalized_name in headers:
+
+            result[name] = headers[
+                normalized_name
+            ]
 
     return result
 
 
-def get_sheet_names(uploaded_file):
+# ==========================================================
+# NOMS FEUILLES
+# ==========================================================
+
+def get_sheet_names(
+    uploaded_file,
+):
 
     uploaded_file.seek(0)
 
@@ -231,7 +275,9 @@ def copy_heidenhain_row(
         start=1,
     ):
 
-        source_col = source_columns[column_name]
+        source_col = source_columns[
+            column_name
+        ]
 
         source_cell = source_ws.cell(
             row=source_row,
@@ -243,32 +289,29 @@ def copy_heidenhain_row(
             column=output_col,
         )
 
-        # ----------------------------------------------
         # Prix SAV :
-        # on prend la VALEUR calculée d'Excel
+        # on récupère la valeur calculée
         # et non la formule.
-        # ----------------------------------------------
 
         if column_name == "Prix (SAV)":
 
-            target_cell.value = values_ws.cell(
-                row=source_row,
-                column=source_col,
-            ).value
+            target_cell.value = (
+                values_ws.cell(
+                    row=source_row,
+                    column=source_col,
+                ).value
+            )
 
         else:
 
-            target_cell.value = source_cell.value
+            target_cell.value = (
+                source_cell.value
+            )
 
         copy_style_safe(
             source_cell,
             target_cell,
         )
-
-
-    # ----------------------------------------------
-    # ID SAV
-    # ----------------------------------------------
 
     if new_id is not None:
 
@@ -279,7 +322,8 @@ def copy_heidenhain_row(
             )
 
         id_output_col = (
-            output_columns.index("ID") + 1
+            output_columns.index("ID")
+            + 1
         )
 
         output_ws.cell(
@@ -298,8 +342,13 @@ def process_heidenhain(
     output_columns,
 ):
 
-    header_row = int(header_row)
-    data_start_row = int(data_start_row)
+    header_row = int(
+        header_row
+    )
+
+    data_start_row = int(
+        data_start_row
+    )
 
     if data_start_row <= header_row:
 
@@ -314,9 +363,9 @@ def process_heidenhain(
             "La colonne ID est obligatoire."
         )
 
-    # ------------------------------------------------------
+    # ======================================================
     # OUVERTURE FORMULES
-    # ------------------------------------------------------
+    # ======================================================
 
     uploaded_file.seek(0)
 
@@ -338,11 +387,13 @@ def process_heidenhain(
             f"Feuilles disponibles : {names}"
         )
 
-    source_ws = wb_formula[sheet_name]
+    source_ws = wb_formula[
+        sheet_name
+    ]
 
-    # ------------------------------------------------------
-    # OUVERTURE VALEURS CALCULEES
-    # ------------------------------------------------------
+    # ======================================================
+    # OUVERTURE VALEURS
+    # ======================================================
 
     uploaded_file.seek(0)
 
@@ -351,11 +402,13 @@ def process_heidenhain(
         data_only=True,
     )
 
-    values_ws = wb_values[sheet_name]
+    values_ws = wb_values[
+        sheet_name
+    ]
 
-    # ------------------------------------------------------
+    # ======================================================
     # COLONNES
-    # ------------------------------------------------------
+    # ======================================================
 
     required = list(
         dict.fromkeys(
@@ -404,19 +457,23 @@ def process_heidenhain(
         max_row - data_start_row + 1,
     )
 
-    # ------------------------------------------------------
+    # ======================================================
     # NOUVEAU CLASSEUR
-    # ------------------------------------------------------
+    # ======================================================
 
-    output_wb = openpyxl.Workbook()
+    output_wb = (
+        openpyxl.Workbook()
+    )
 
-    output_ws = output_wb.active
+    output_ws = (
+        output_wb.active
+    )
 
     output_ws.title = sheet_name
 
-    # ------------------------------------------------------
+    # ======================================================
     # EN-TETES
-    # ------------------------------------------------------
+    # ======================================================
 
     for output_col, column_name in enumerate(
         output_columns,
@@ -425,7 +482,9 @@ def process_heidenhain(
 
         source_header = source_ws.cell(
             row=header_row,
-            column=source_columns[column_name],
+            column=source_columns[
+                column_name
+            ],
         )
 
         target_header = output_ws.cell(
@@ -433,16 +492,18 @@ def process_heidenhain(
             column=output_col,
         )
 
-        target_header.value = source_header.value
+        target_header.value = (
+            source_header.value
+        )
 
         copy_style_safe(
             source_header,
             target_header,
         )
 
-    # ------------------------------------------------------
+    # ======================================================
     # IDS EXISTANTS
-    # ------------------------------------------------------
+    # ======================================================
 
     existing_ids = set()
 
@@ -456,14 +517,19 @@ def process_heidenhain(
             column=id_col,
         ).value
 
-        normalized = normalize(value)
+        normalized = normalize(
+            value
+        )
 
         if normalized:
-            existing_ids.add(normalized)
 
-    # ------------------------------------------------------
+            existing_ids.add(
+                normalized
+            )
+
+    # ======================================================
     # TRAITEMENT
-    # ------------------------------------------------------
+    # ======================================================
 
     rows_to_create = []
 
@@ -486,10 +552,6 @@ def process_heidenhain(
         )
     ):
 
-        # ----------------------------------------------
-        # Ligne originale
-        # ----------------------------------------------
-
         copy_heidenhain_row(
             source_ws=source_ws,
             values_ws=values_ws,
@@ -500,10 +562,6 @@ def process_heidenhain(
             output_columns=output_columns,
         )
 
-        # ----------------------------------------------
-        # Hauteur
-        # ----------------------------------------------
-
         output_ws.row_dimensions[
             output_row
         ].height = (
@@ -511,10 +569,6 @@ def process_heidenhain(
                 source_row
             ].height
         )
-
-        # ----------------------------------------------
-        # Statut
-        # ----------------------------------------------
 
         status = normalize(
             source_ws.cell(
@@ -524,14 +578,12 @@ def process_heidenhain(
         )
 
         if status == "VG":
+
             vg_count += 1
 
         elif status == "PG":
-            pg_count += 1
 
-        # ----------------------------------------------
-        # ID SAV
-        # ----------------------------------------------
+            pg_count += 1
 
         if status in STATUS_TO_DUPLICATE:
 
@@ -587,13 +639,19 @@ def process_heidenhain(
             pct = int(
                 (
                     (index + 1)
-                    / max(1, total_rows)
+                    / max(
+                        1,
+                        total_rows,
+                    )
                 )
                 * 100
             )
 
             progress.progress(
-                min(pct, 100),
+                min(
+                    pct,
+                    100,
+                ),
                 text=(
                     f"Heidenhain : "
                     f"{index + 1:,} / "
@@ -601,9 +659,9 @@ def process_heidenhain(
                 ),
             )
 
-    # ------------------------------------------------------
+    # ======================================================
     # LIGNES SAV
-    # ------------------------------------------------------
+    # ======================================================
 
     created_ids = []
 
@@ -628,13 +686,15 @@ def process_heidenhain(
             ].height
         )
 
-        created_ids.append(new_id)
+        created_ids.append(
+            new_id
+        )
 
         output_row += 1
 
-    # ------------------------------------------------------
+    # ======================================================
     # LARGEURS
-    # ------------------------------------------------------
+    # ======================================================
 
     for output_col, column_name in enumerate(
         output_columns,
@@ -657,24 +717,29 @@ def process_heidenhain(
             )
         )
 
-        width = source_ws.column_dimensions[
-            source_letter
-        ].width
+        width = (
+            source_ws.column_dimensions[
+                source_letter
+            ].width
+        )
 
         if width:
+
             output_ws.column_dimensions[
                 target_letter
             ].width = width
 
     output_ws.freeze_panes = "A2"
 
-    # ------------------------------------------------------
+    # ======================================================
     # SAUVEGARDE
-    # ------------------------------------------------------
+    # ======================================================
 
     result = BytesIO()
 
-    output_wb.save(result)
+    output_wb.save(
+        result
+    )
 
     result.seek(0)
 
@@ -688,14 +753,313 @@ def process_heidenhain(
         "total_rows": total_rows,
         "vg": vg_count,
         "pg": pg_count,
-        "vg_pg": vg_count + pg_count,
-        "created": len(created_ids),
+        "vg_pg": (
+            vg_count
+            + pg_count
+        ),
+        "created": len(
+            created_ids
+        ),
         "duplicates": duplicate_count,
         "empty_ids": empty_id_count,
         "created_ids": created_ids,
     }
 
     return data, stats
+
+
+# ==========================================================
+# ETAPE 2
+# CHARGEMENT UNIQUE DES CATEGORIES
+# ==========================================================
+
+def load_category_mapping(
+    category_file,
+    category_sheet,
+    category_id_col,
+    category_search_col,
+):
+
+    """
+    Charge UNE SEULE FOIS toutes les catégories.
+
+    Exemple :
+
+        Colonne B = 123
+        Colonne C = 20 - Métrologie
+
+    On crée plusieurs clés de recherche :
+
+        "20 - METROLOGIE"
+        "20"
+
+    afin de pouvoir retrouver rapidement
+    la catégorie.
+    """
+
+    category_file.seek(0)
+
+    wb = openpyxl.load_workbook(
+        category_file,
+        data_only=True,
+        read_only=True,
+    )
+
+    if category_sheet not in wb.sheetnames:
+
+        names = ", ".join(
+            wb.sheetnames
+        )
+
+        wb.close()
+
+        raise ValueError(
+            f"Feuille catégorie "
+            f"'{category_sheet}' introuvable.\n"
+            f"Feuilles disponibles : {names}"
+        )
+
+    ws = wb[
+        category_sheet
+    ]
+
+    mapping = {}
+
+    rows_loaded = 0
+
+    for row in ws.iter_rows(
+        min_row=1,
+        values_only=True,
+    ):
+
+        # --------------------------------------------------
+        # Protection si les colonnes demandées
+        # dépassent la longueur de la ligne
+        # --------------------------------------------------
+
+        max_index = max(
+            category_id_col,
+            category_search_col,
+        ) - 1
+
+        if max_index >= len(row):
+            continue
+
+        category_id = row[
+            category_id_col - 1
+        ]
+
+        category_text = row[
+            category_search_col - 1
+        ]
+
+        if (
+            category_id is None
+            or category_text is None
+        ):
+            continue
+
+        category_id = str(
+            category_id
+        ).strip()
+
+        category_text = str(
+            category_text
+        ).strip()
+
+        if (
+            not category_id
+            or not category_text
+        ):
+            continue
+
+        rows_loaded += 1
+
+        normalized_text = normalize(
+            category_text
+        )
+
+        # --------------------------------------------------
+        # Clé texte complète
+        # --------------------------------------------------
+
+        if normalized_text not in mapping:
+
+            mapping[
+                normalized_text
+            ] = category_id
+
+        # --------------------------------------------------
+        # Clé avant "-"
+        #
+        # Exemple :
+        # 20 - Métrologie
+        #
+        # => 20
+        # --------------------------------------------------
+
+        if "-" in category_text:
+
+            first_part = (
+                category_text
+                .split("-", 1)[0]
+                .strip()
+            )
+
+            if first_part:
+
+                normalized_first = normalize(
+                    first_part
+                )
+
+                if normalized_first not in mapping:
+
+                    mapping[
+                        normalized_first
+                    ] = category_id
+
+        # --------------------------------------------------
+        # Clé avant "–" (tiret long)
+        # --------------------------------------------------
+
+        if "–" in category_text:
+
+            first_part = (
+                category_text
+                .split("–", 1)[0]
+                .strip()
+            )
+
+            if first_part:
+
+                normalized_first = normalize(
+                    first_part
+                )
+
+                if normalized_first not in mapping:
+
+                    mapping[
+                        normalized_first
+                    ] = category_id
+
+    wb.close()
+
+    return mapping, rows_loaded
+
+
+# ==========================================================
+# RECHERCHE CATEGORIE RAPIDE
+# ==========================================================
+
+def find_category_id_fast(
+    groupe_produit,
+    category_mapping,
+):
+
+    if groupe_produit is None:
+
+        return None
+
+    group = str(
+        groupe_produit
+    ).strip()
+
+    if not group:
+
+        return None
+
+    normalized_group = normalize(
+        group
+    )
+
+    # ------------------------------------------------------
+    # 1. Correspondance exacte
+    # ------------------------------------------------------
+
+    if normalized_group in category_mapping:
+
+        return category_mapping[
+            normalized_group
+        ]
+
+    # ------------------------------------------------------
+    # 2. Partie avant "-"
+    # ------------------------------------------------------
+
+    if "-" in group:
+
+        first_part = (
+            group
+            .split("-", 1)[0]
+            .strip()
+        )
+
+        if first_part:
+
+            normalized_first = normalize(
+                first_part
+            )
+
+            if (
+                normalized_first
+                in category_mapping
+            ):
+
+                return category_mapping[
+                    normalized_first
+                ]
+
+    # ------------------------------------------------------
+    # 3. Partie avant "–"
+    # ------------------------------------------------------
+
+    if "–" in group:
+
+        first_part = (
+            group
+            .split("–", 1)[0]
+            .strip()
+        )
+
+        if first_part:
+
+            normalized_first = normalize(
+                first_part
+            )
+
+            if (
+                normalized_first
+                in category_mapping
+            ):
+
+                return category_mapping[
+                    normalized_first
+                ]
+
+    # ------------------------------------------------------
+    # 4. Recherche par présence
+    #
+    # Exemple :
+    #
+    # groupe = "20"
+    #
+    # catégorie = "20 - METROLOGIE"
+    #
+    # Si la clé exacte n'a pas été créée,
+    # on cherche dans les clés.
+    # ------------------------------------------------------
+
+    for key, category_id in category_mapping.items():
+
+        if (
+            normalized_group
+            and normalized_group in key
+        ):
+
+            return category_id
+
+    return None
+
 
 # ==========================================================
 # ETAPE 2
@@ -1964,4 +2328,3 @@ st.divider()
 st.success(
     "🎯 Le fichier Odoo final peut maintenant être téléchargé."
 )
-
