@@ -1,15 +1,27 @@
 # ==========================================================
 # TRANSFERT DES PRIX HEIDENHAIN VERS ODOO
-# V1 - Base import des fichiers
+# JMA
+# ==========================================================
+#
+# Etape 1 :
+#   - Import fichier 1 : Prix Heidenhain
+#   - Import fichier 2 : Import Odoo
+#   - Traitement du fichier Heidenhain
+#   - Duplication des lignes VG / PG avec suffixe "_SAv"
+#
 # ==========================================================
 
 import streamlit as st
 import pandas as pd
-from io import BytesIO
+
+from traitement import (
+    process_heidenhain,
+    get_sheet_names,
+)
 
 
 # ==========================================================
-# CONFIGURATION
+# CONFIGURATION STREAMLIT
 # ==========================================================
 
 st.set_page_config(
@@ -18,213 +30,93 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Transfert des prix HEIDENHAIN vers ODOO")
-st.caption("Étape 1 — Import des fichiers")
+st.title("📦 Transfert des prix HEIDENHAIN vers ODOO")
+
+st.caption(
+    "Étape 1 — Préparation du fichier des prix HEIDENHAIN"
+)
 
 
 # ==========================================================
-# INITIALISATION SESSION
+# SESSION STATE
 # ==========================================================
 
-if "heidenhain_df" not in st.session_state:
-    st.session_state.heidenhain_df = None
+if "heidenhain_bytes" not in st.session_state:
+    st.session_state.heidenhain_bytes = None
+
+if "heidenhain_result" not in st.session_state:
+    st.session_state.heidenhain_result = None
+
+if "heidenhain_stats" not in st.session_state:
+    st.session_state.heidenhain_stats = None
 
 if "odoo_df" not in st.session_state:
     st.session_state.odoo_df = None
 
-if "heidenhain_file_name" not in st.session_state:
-    st.session_state.heidenhain_file_name = None
-
-if "odoo_file_name" not in st.session_state:
-    st.session_state.odoo_file_name = None
-
 
 # ==========================================================
-# FONCTIONS
+# PARAMETRES
 # ==========================================================
 
-def read_uploaded_file(uploaded_file):
-    """
-    Lit un fichier Excel ou CSV et retourne un dictionnaire
-    contenant les DataFrames.
-
-    Pour Excel :
-        {
-            "NomFeuille1": dataframe,
-            "NomFeuille2": dataframe,
-            ...
-        }
-
-    Pour CSV :
-        {
-            "CSV": dataframe
-        }
-    """
-
-    if uploaded_file is None:
-        return {}
-
-    extension = uploaded_file.name.lower().split(".")[-1]
-
-    try:
-
-        # --------------------------------------------------
-        # EXCEL
-        # --------------------------------------------------
-
-        if extension in ["xlsx", "xls"]:
-
-            excel_file = pd.ExcelFile(uploaded_file)
-
-            sheets = {}
-
-            for sheet_name in excel_file.sheet_names:
-                sheets[sheet_name] = pd.read_excel(
-                    excel_file,
-                    sheet_name=sheet_name,
-                )
-
-            return sheets
-
-        # --------------------------------------------------
-        # CSV
-        # --------------------------------------------------
-
-        elif extension == "csv":
-
-            uploaded_file.seek(0)
-
-            # Première tentative avec ;
-            try:
-                df = pd.read_csv(
-                    uploaded_file,
-                    sep=";",
-                    encoding="utf-8-sig",
-                )
-
-                # Si une seule colonne, le séparateur était
-                # probablement incorrect.
-                if len(df.columns) == 1:
-                    uploaded_file.seek(0)
-
-                    df = pd.read_csv(
-                        uploaded_file,
-                        sep=",",
-                        encoding="utf-8-sig",
-                    )
-
-            except Exception:
-
-                uploaded_file.seek(0)
-
-                df = pd.read_csv(
-                    uploaded_file,
-                    sep=",",
-                    encoding="utf-8-sig",
-                )
-
-            return {"CSV": df}
-
-        else:
-            st.error(
-                f"Format non supporté : {uploaded_file.name}"
-            )
-            return {}
-
-    except Exception as e:
-
-        st.error(
-            f"Impossible de lire le fichier "
-            f"**{uploaded_file.name}**.\n\n"
-            f"Erreur : `{e}`"
-        )
-
-        return {}
+st.sidebar.header("⚙️ Paramètres")
 
 
-def display_file_info(
-    file_name,
-    sheets,
-    file_label,
-):
-    """
-    Affiche les informations générales du fichier.
-    """
-
-    if not sheets:
-        return
-
-    st.success(
-        f"✅ {file_label} chargé : **{file_name}**"
-    )
-
-    st.write(
-        f"**Nombre de feuille(s) :** {len(sheets)}"
-    )
-
-    for sheet_name, df in sheets.items():
-
-        st.markdown(
-            f"### 📄 Feuille : `{sheet_name}`"
-        )
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric(
-                "Lignes",
-                f"{len(df):,}".replace(",", " "),
-            )
-
-        with col2:
-            st.metric(
-                "Colonnes",
-                len(df.columns),
-            )
-
-        with col3:
-            st.metric(
-                "Cellules",
-                f"{df.shape[0] * df.shape[1]:,}".replace(",", " "),
-            )
-
-        st.dataframe(
-            df.head(10),
-            use_container_width=True,
-        )
+heidenhain_sheet = st.sidebar.text_input(
+    "Feuille du fichier Heidenhain",
+    value="Distributeurs",
+    help="Nom de la feuille dans le fichier des prix Heidenhain.",
+)
 
 
-def combine_excel_sheets(sheets):
-    """
-    Pour l'instant, on utilise la première feuille.
-
-    Cette fonction pourra être remplacée lorsque nous
-    connaîtrons précisément la structure du fichier Heidenhain
-    et du fichier Odoo.
-    """
-
-    if not sheets:
-        return None
-
-    first_sheet = next(iter(sheets))
-
-    return sheets[first_sheet].copy()
+heidenhain_header_row = st.sidebar.number_input(
+    "Ligne des noms de colonnes Heidenhain",
+    min_value=1,
+    value=4,
+    step=1,
+    help="Les noms des colonnes se trouvent sur cette ligne.",
+)
 
 
-# ==========================================================
-# SIDEBAR
-# ==========================================================
+heidenhain_data_start_row = st.sidebar.number_input(
+    "Première ligne de données Heidenhain",
+    min_value=1,
+    value=5,
+    step=1,
+    help="Les données commencent à cette ligne.",
+)
 
-st.sidebar.header("⚙️ Configuration")
+
+status_column = st.sidebar.text_input(
+    "Colonne Statut",
+    value="Statut",
+    help="Nom exact de la colonne contenant VG / PG.",
+)
+
+
+id_column = st.sidebar.text_input(
+    "Colonne ID",
+    value="ID",
+    help="Nom exact de la colonne contenant l'identifiant.",
+)
+
+
+st.sidebar.markdown("---")
 
 st.sidebar.info(
     """
-Cette première version permet uniquement de charger :
+### Règle actuelle
 
-1. Le fichier des prix HEIDENHAIN
-2. Le fichier d'import ODOO
+Pour chaque ligne dont le statut est :
 
-Le traitement des données sera effectué dans l'étape suivante.
+- `VG`
+- `PG`
+
+on crée une copie de la ligne avec :
+
+`ID` → `ID_SAv`
+
+La copie est créée uniquement si le nouvel ID
+n'existe pas déjà dans le fichier.
 """
 )
 
@@ -235,232 +127,465 @@ Le traitement des données sera effectué dans l'étape suivante.
 
 st.header("📂 1. Import des fichiers")
 
-
 col1, col2 = st.columns(2)
 
 
 # ==========================================================
-# FICHIER HEIDENHAIN
+# FICHIER 1 — HEIDENHAIN
 # ==========================================================
 
 with col1:
 
-    st.subheader("📘 Fichier 1 — Prix HEIDENHAIN")
+    st.subheader("📘 Fichier 1 — Prix Heidenhain")
 
     heidenhain_file = st.file_uploader(
-        "Sélectionner le fichier des prix HEIDENHAIN",
-        type=["xlsx", "xls", "csv"],
+        "Sélectionner le fichier des prix Heidenhain",
+        type=["xlsx", "xlsm"],
         key="heidenhain_upload",
     )
 
     if heidenhain_file is not None:
 
-        heidenhain_sheets = read_uploaded_file(
-            heidenhain_file
+        st.success(
+            f"✅ Fichier chargé : `{heidenhain_file.name}`"
         )
 
-        if heidenhain_sheets:
+        # ----------------------------------------------
+        # Liste des feuilles
+        # ----------------------------------------------
 
-            st.session_state.heidenhain_file_name = (
-                heidenhain_file.name
+        try:
+
+            sheet_names = get_sheet_names(
+                heidenhain_file
             )
 
-            st.session_state.heidenhain_df = (
-                combine_excel_sheets(
-                    heidenhain_sheets
+            st.write(
+                "**Feuilles disponibles :**"
+            )
+
+            st.write(sheet_names)
+
+            if heidenhain_sheet not in sheet_names:
+
+                st.error(
+                    f"❌ La feuille `{heidenhain_sheet}` "
+                    f"n'existe pas dans le fichier."
                 )
-            )
 
-            display_file_info(
-                heidenhain_file.name,
-                heidenhain_sheets,
-                "Fichier prix HEIDENHAIN",
+                st.info(
+                    "Sélectionnez le bon nom de feuille "
+                    "dans les paramètres à gauche."
+                )
+
+            else:
+
+                st.success(
+                    f"✅ Feuille `{heidenhain_sheet}` trouvée."
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Impossible de lire le fichier : {e}"
             )
 
 
 # ==========================================================
-# FICHIER ODOO
+# FICHIER 2 — ODOO
 # ==========================================================
 
 with col2:
 
-    st.subheader("📗 Fichier 2 — Import ODOO")
+    st.subheader("📗 Fichier 2 — Import Odoo")
 
     odoo_file = st.file_uploader(
-        "Sélectionner le fichier d'import ODOO",
-        type=["xlsx", "xls", "csv"],
+        "Sélectionner le fichier d'import Odoo",
+        type=["xlsx", "xls", "xlsm", "csv"],
         key="odoo_upload",
     )
 
     if odoo_file is not None:
 
-        odoo_sheets = read_uploaded_file(
-            odoo_file
+        st.success(
+            f"✅ Fichier chargé : `{odoo_file.name}`"
         )
 
-        if odoo_sheets:
+        # ----------------------------------------------
+        # Lecture provisoire du fichier Odoo
+        # ----------------------------------------------
 
-            st.session_state.odoo_file_name = (
+        try:
+
+            extension = (
                 odoo_file.name
+                .lower()
+                .split(".")[-1]
             )
 
-            st.session_state.odoo_df = (
-                combine_excel_sheets(
-                    odoo_sheets
+            if extension == "csv":
+
+                odoo_df = pd.read_csv(
+                    odoo_file,
+                    header=0,
+                    sep=None,
+                    engine="python",
                 )
+
+            else:
+
+                odoo_df = pd.read_excel(
+                    odoo_file,
+                    sheet_name="Sheet1",
+                    header=0,
+                )
+
+            st.session_state.odoo_df = odoo_df
+
+            st.success(
+                "✅ Feuille `Sheet1` chargée."
             )
 
-            display_file_info(
-                odoo_file.name,
-                odoo_sheets,
-                "Fichier import ODOO",
+            st.write(
+                f"**Nombre de lignes :** {len(odoo_df)}"
+            )
+
+            st.write(
+                f"**Nombre de colonnes :** "
+                f"{len(odoo_df.columns)}"
+            )
+
+            st.dataframe(
+                odoo_df.head(10),
+                use_container_width=True,
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"Impossible de lire le fichier Odoo : {e}"
             )
 
 
 # ==========================================================
-# VERIFICATION DES DEUX FICHIERS
+# APERCU FICHIER HEIDENHAIN
+# ==========================================================
+
+if heidenhain_file is not None:
+
+    st.divider()
+
+    st.header("🔎 2. Vérification du fichier Heidenhain")
+
+    try:
+
+        # ----------------------------------------------
+        # Lecture avec Pandas uniquement pour aperçu
+        # ----------------------------------------------
+
+        heidenhain_file.seek(0)
+
+        df_preview = pd.read_excel(
+            heidenhain_file,
+            sheet_name=heidenhain_sheet,
+            header=heidenhain_header_row - 1,
+        )
+
+        st.write(
+            f"**Feuille :** `{heidenhain_sheet}`"
+        )
+
+        st.write(
+            f"**Première ligne de données :** "
+            f"{heidenhain_data_start_row}"
+        )
+
+        st.write(
+            f"**Nombre de lignes détectées :** "
+            f"{len(df_preview)}"
+        )
+
+        # ----------------------------------------------
+        # Vérification colonnes
+        # ----------------------------------------------
+
+        if status_column not in df_preview.columns:
+
+            st.error(
+                f"❌ La colonne `{status_column}` "
+                f"n'existe pas."
+            )
+
+            st.write(
+                "Colonnes disponibles :"
+            )
+
+            st.write(
+                list(df_preview.columns)
+            )
+
+        elif id_column not in df_preview.columns:
+
+            st.error(
+                f"❌ La colonne `{id_column}` "
+                f"n'existe pas."
+            )
+
+            st.write(
+                "Colonnes disponibles :"
+            )
+
+            st.write(
+                list(df_preview.columns)
+            )
+
+        else:
+
+            st.success(
+                f"✅ Colonnes `{status_column}` et "
+                f"`{id_column}` trouvées."
+            )
+
+            st.dataframe(
+                df_preview.head(10),
+                use_container_width=True,
+            )
+
+            # ------------------------------------------
+            # Statistiques VG / PG
+            # ------------------------------------------
+
+            status_series = (
+                df_preview[status_column]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
+
+            vg_count = (
+                status_series == "VG"
+            ).sum()
+
+            pg_count = (
+                status_series == "PG"
+            ).sum()
+
+            st.write(
+                f"**Lignes VG :** {vg_count}"
+            )
+
+            st.write(
+                f"**Lignes PG :** {pg_count}"
+            )
+
+    except Exception as e:
+
+        st.error(
+            f"Erreur lors de l'analyse du fichier "
+            f"Heidenhain : {e}"
+        )
+
+
+# ==========================================================
+# TRAITEMENT
 # ==========================================================
 
 st.divider()
 
-st.header("🔎 2. Vérification des fichiers")
+st.header("⚙️ 3. Traitement du fichier Heidenhain")
 
 
-heidenhain_ok = (
-    st.session_state.heidenhain_df is not None
-)
-
-odoo_ok = (
-    st.session_state.odoo_df is not None
-)
-
-
-col1, col2 = st.columns(2)
-
-
-with col1:
-
-    if heidenhain_ok:
-
-        st.success(
-            "✅ Fichier HEIDENHAIN disponible"
-        )
-
-        st.write(
-            f"**Fichier :** "
-            f"{st.session_state.heidenhain_file_name}"
-        )
-
-        st.write(
-            f"**Lignes :** "
-            f"{len(st.session_state.heidenhain_df)}"
-        )
-
-        st.write(
-            f"**Colonnes :** "
-            f"{len(st.session_state.heidenhain_df.columns)}"
-        )
-
-    else:
-
-        st.warning(
-            "⏳ Fichier HEIDENHAIN non chargé"
-        )
-
-
-with col2:
-
-    if odoo_ok:
-
-        st.success(
-            "✅ Fichier ODOO disponible"
-        )
-
-        st.write(
-            f"**Fichier :** "
-            f"{st.session_state.odoo_file_name}"
-        )
-
-        st.write(
-            f"**Lignes :** "
-            f"{len(st.session_state.odoo_df)}"
-        )
-
-        st.write(
-            f"**Colonnes :** "
-            f"{len(st.session_state.odoo_df.columns)}"
-        )
-
-    else:
-
-        st.warning(
-            "⏳ Fichier ODOO non chargé"
-        )
-
-
-# ==========================================================
-# LES DEUX FICHIERS SONT DISPONIBLES
-# ==========================================================
-
-if heidenhain_ok and odoo_ok:
-
-    st.divider()
-
-    st.success(
-        "🎯 Les deux fichiers sont correctement chargés."
-    )
-
-    st.header("📊 Données disponibles pour le traitement")
-
-    tab1, tab2 = st.tabs(
-        [
-            "📘 Prix HEIDENHAIN",
-            "📗 Import ODOO",
-        ]
-    )
-
-    with tab1:
-
-        st.write(
-            f"**Source :** "
-            f"{st.session_state.heidenhain_file_name}"
-        )
-
-        st.dataframe(
-            st.session_state.heidenhain_df,
-            use_container_width=True,
-            height=400,
-        )
-
-    with tab2:
-
-        st.write(
-            f"**Source :** "
-            f"{st.session_state.odoo_file_name}"
-        )
-
-        st.dataframe(
-            st.session_state.odoo_df,
-            use_container_width=True,
-            height=400,
-        )
-
-    st.divider()
+if heidenhain_file is None:
 
     st.info(
-        """
-        ℹ️ Les deux fichiers sont maintenant disponibles
-        en mémoire.
+        "👆 Importez le fichier des prix Heidenhain "
+        "pour commencer."
+    )
 
-        **Étape suivante :** définir les colonnes et les règles
-        permettant de faire le rapprochement entre les prix
-        HEIDENHAIN et les produits ODOO.
-        """
+elif (
+    st.session_state.get("odoo_df") is None
+):
+
+    st.warning(
+        "⚠️ Le fichier Odoo n'est pas encore chargé."
     )
 
 else:
 
+    st.write(
+        "Les deux fichiers sont disponibles."
+    )
+
+    st.markdown(
+        """
+        ### Traitement prévu
+
+        Le programme va :
+
+        1. Parcourir les lignes à partir de la ligne 5.
+        2. Lire la colonne **Statut**.
+        3. Sélectionner uniquement `VG` et `PG`.
+        4. Récupérer l'**ID**.
+        5. Créer `ID_SAv`.
+        6. Vérifier si `ID_SAv` existe déjà.
+        7. Si l'ID n'existe pas, copier la ligne complète.
+        8. Ajouter la copie à la première ligne libre.
+        9. Générer un nouveau fichier Excel.
+        """
+    )
+
+    if st.button(
+        "🚀 Traiter le fichier Heidenhain",
+        type="primary",
+        use_container_width=True,
+    ):
+
+        try:
+
+            # ------------------------------------------
+            # Remettre le fichier au début
+            # ------------------------------------------
+
+            heidenhain_file.seek(0)
+
+            # ------------------------------------------
+            # Traitement
+            # ------------------------------------------
+
+            result_bytes, stats = process_heidenhain(
+                uploaded_file=heidenhain_file,
+                sheet_name=heidenhain_sheet,
+                header_row=heidenhain_header_row,
+                data_start_row=heidenhain_data_start_row,
+                status_column=status_column,
+                id_column=id_column,
+            )
+
+            # ------------------------------------------
+            # Sauvegarde en session
+            # ------------------------------------------
+
+            st.session_state.heidenhain_result = (
+                result_bytes
+            )
+
+            st.session_state.heidenhain_stats = (
+                stats
+            )
+
+            # ------------------------------------------
+            # Résultat
+            # ------------------------------------------
+
+            st.success(
+                "✅ Traitement terminé."
+            )
+
+            st.subheader("📊 Résultat")
+
+            c1, c2, c3 = st.columns(3)
+
+            with c1:
+
+                st.metric(
+                    "VG / PG trouvés",
+                    stats["vg_pg_found"],
+                )
+
+            with c2:
+
+                st.metric(
+                    "Nouvelles lignes créées",
+                    stats["rows_created"],
+                )
+
+            with c3:
+
+                st.metric(
+                    "IDs déjà existants",
+                    stats["ids_already_existing"],
+                )
+
+            if stats["rows_created"] > 0:
+
+                st.success(
+                    f"✅ {stats['rows_created']} "
+                    f"ligne(s) ajoutée(s)."
+                )
+
+            else:
+
+                st.warning(
+                    "Aucune nouvelle ligne n'a été créée."
+                )
+
+            # ------------------------------------------
+            # IDs créés
+            # ------------------------------------------
+
+            if stats["created_ids"]:
+
+                st.subheader(
+                    "🆕 Nouveaux IDs créés"
+                )
+
+                st.dataframe(
+                    pd.DataFrame(
+                        {
+                            "Nouveau ID": (
+                                stats["created_ids"]
+                            )
+                        }
+                    ),
+                    use_container_width=True,
+                )
+
+            # ------------------------------------------
+            # Téléchargement
+            # ------------------------------------------
+
+            st.download_button(
+                label="⬇️ Télécharger le fichier Heidenhain mis à jour",
+                data=result_bytes,
+                file_name=(
+                    "Prix_Heidenhain_mis_a_jour.xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Le traitement a échoué."
+            )
+
+            st.exception(e)
+
+
+# ==========================================================
+# ETAPE SUIVANTE
+# ==========================================================
+
+if (
+    st.session_state.get("heidenhain_result")
+    is not None
+):
+
+    st.divider()
+
+    st.header("➡️ Étape suivante")
+
     st.info(
-        "👆 Importez les deux fichiers pour pouvoir commencer "
-        "le traitement."
+        """
+        Le fichier Heidenhain est maintenant préparé.
+
+        **Prochaine étape :** utiliser ce fichier avec
+        le fichier d'import Odoo afin de rechercher les
+        produits correspondants et modifier le fichier
+        d'import Odoo.
+        """
     )
