@@ -57,6 +57,16 @@ STATUS_TO_DUPLICATE = {
     "PG",
 }
 
+HEIDENHAIN_AVAILABLE_COLUMNS = [
+    "ID",
+    "Description",
+    "Marque",
+    "Statut",
+    "Groupe Produit",
+    "Prix (PPC)",
+    "Prix (SAV)",
+]
+
 DEFAULT_OUTPUT_COLUMNS = [
     "ID",
     "Description",
@@ -66,6 +76,7 @@ DEFAULT_OUTPUT_COLUMNS = [
     "Prix (PPC)",
     "Prix (SAV)",
 ]
+
 
 
 # ==========================================================
@@ -1854,6 +1865,27 @@ sav_column = st.sidebar.text_input(
     "Colonne Prix SAV",
     "Prix (SAV)",
 )
+
+st.sidebar.subheader(
+    "📋 Colonnes à conserver à l'étape 1"
+)
+
+heidenhain_output_columns = st.sidebar.multiselect(
+    "Sélectionner les colonnes à garder",
+    options=HEIDENHAIN_AVAILABLE_COLUMNS,
+    default=DEFAULT_OUTPUT_COLUMNS,
+    help=(
+        "Ces colonnes seront conservées dans le fichier "
+        "Heidenhain préparé."
+    ),
+)
+
+if "ID" not in heidenhain_output_columns:
+
+    st.sidebar.error(
+        "⚠️ La colonne ID est obligatoire."
+    )
+
 
 
 # ==========================================================
