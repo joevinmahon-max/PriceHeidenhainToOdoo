@@ -192,19 +192,42 @@ def get_excel_sheet_names(uploaded_file):
     
     uploaded_file.seek(0)
     
-    # Classeur avec les formules
+    # Classeur principal : formules + styles
     workbook = openpyxl.load_workbook(
         uploaded_file,
         data_only=False,
     )
     
-    # Classeur avec les valeurs calculées par Excel
+    if sheet_name not in workbook.sheetnames:
+        available = ", ".join(workbook.sheetnames)
+        workbook.close()
+    
+        raise ValueError(
+            f"La feuille '{sheet_name}' n'existe pas.\n\n"
+            f"Feuilles disponibles : {available}"
+        )
+    
+    source_ws = workbook[sheet_name]
+    
+    # Deuxième ouverture : valeurs calculées par Excel
     uploaded_file.seek(0)
     
     workbook_values = openpyxl.load_workbook(
         uploaded_file,
         data_only=True,
     )
+    
+    if sheet_name not in workbook_values.sheetnames:
+        workbook.close()
+        workbook_values.close()
+    
+        raise ValueError(
+            f"La feuille '{sheet_name}' n'existe pas dans "
+            "le fichier des valeurs."
+        )
+    
+    values_ws = workbook_values[sheet_name]
+
 
 
     sheet_names = workbook.sheetnames
