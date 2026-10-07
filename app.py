@@ -1086,6 +1086,8 @@ def process_odoo(
     heidenhain_group_column,
     heidenhain_ppc_column,
     heidenhain_sav_column,
+    heidenhain_description,
+    heidenhain_marque,
 
     odoo_reference_column,
     odoo_sales_status_column,
@@ -1097,6 +1099,8 @@ def process_odoo(
     odoo_type_column,
     odoo_invoice_policy_column,
     odoo_category_column,
+    odoo_name,
+    odoo_brand_description,
 ):
 
     # ======================================================
@@ -1170,6 +1174,8 @@ def process_odoo(
         heidenhain_group_column,
         heidenhain_ppc_column,
         heidenhain_sav_column,
+        heidenhain_description,
+        heidenhain_marque,
     ]
 
     h_columns = find_columns(
@@ -1245,6 +1251,8 @@ def process_odoo(
         odoo_type_column,
         odoo_invoice_policy_column,
         odoo_category_column,
+        odoo_name,
+        odoo_brand_description,
     ]
 
     odoo_columns = find_columns(
@@ -1555,6 +1563,36 @@ def process_odoo(
 
 
         # ==================================================
+        # NOM
+        # ==================================================
+        
+        description = h_ws.cell(
+            row=h_row,
+            column=h_columns[heidenhain_description],
+        ).value
+        
+        ws.cell(
+            row=target_row,
+            column=odoo_columns[odoo_name],
+        ).value = description
+        
+        
+        # ==================================================
+        # MARQUE / DESCRIPTION
+        # ==================================================
+        
+        marque = h_ws.cell(
+            row=h_row,
+            column=h_columns[heidenhain_marque],
+        ).value
+        
+        ws.cell(
+            row=target_row,
+            column=odoo_columns[odoo_brand_description],
+        ).value = marque
+
+        
+        # ==================================================
         # PRIX
         # ==================================================
 
@@ -1818,6 +1856,17 @@ odoo_reference = st.sidebar.text_input(
     "Référence",
     "Référence interne",
 )
+
+odoo_name = st.sidebar.text_input(
+    "Nom",
+    "Nom",
+)
+
+odoo_brand_description = st.sidebar.text_input(
+    "Marque/Description",
+    "Marque/Description",
+)
+
 
 odoo_sales_status = st.sidebar.text_input(
     "Sales Status",
@@ -2120,101 +2169,44 @@ else:
         try:
 
             result, stats = process_odoo(
+            heidenhain_file=heidenhain_file,
+            odoo_file=odoo_file,
+            category_file=category_file,
+        
+            heidenhain_sheet=heidenhain_sheet,
+            odoo_sheet=odoo_sheet,
+            category_sheet=category_sheet,
+        
+            heidenhain_header_row=int(heidenhain_header_row),
+            odoo_header_row=int(odoo_header_row),
+        
+            category_id_col=int(category_id_col),
+            category_search_col=int(category_search_col),
+        
+            heidenhain_id_column=id_column,
+            heidenhain_status_column=status_column,
+            heidenhain_group_column=group_column,
+            heidenhain_ppc_column=ppc_column,
+            heidenhain_sav_column=sav_column,
+        
+            heidenhain_description="Description",
+            heidenhain_marque="Marque",
+        
+            odoo_reference_column=odoo_reference,
+            odoo_sales_status_column=odoo_sales_status,
+            odoo_price_column=odoo_price,
+            odoo_barcode_column=odoo_barcode,
+            odoo_supplier_column=odoo_supplier,
+            odoo_purchase_column=odoo_purchase,
+            odoo_sale_column=odoo_sale,
+            odoo_type_column=odoo_type,
+            odoo_invoice_policy_column=odoo_invoice_policy,
+            odoo_category_column=odoo_category,
+        
+            odoo_name=odoo_name,
+            odoo_brand_description=odoo_brand_description,
+        )
 
-                heidenhain_file=heidenhain_file,
-
-                odoo_file=odoo_file,
-
-                category_file=category_file,
-
-                heidenhain_sheet=(
-                    heidenhain_sheet
-                ),
-
-                odoo_sheet=(
-                    odoo_sheet
-                ),
-
-                category_sheet=(
-                    category_sheet
-                ),
-
-                heidenhain_header_row=int(
-                    heidenhain_header_row
-                ),
-
-                odoo_header_row=int(
-                    odoo_header_row
-                ),
-
-                category_id_col=int(
-                    category_id_col
-                ),
-
-                category_search_col=int(
-                    category_search_col
-                ),
-
-                heidenhain_id_column=(
-                    id_column
-                ),
-
-                heidenhain_status_column=(
-                    status_column
-                ),
-
-                heidenhain_group_column=(
-                    group_column
-                ),
-
-                heidenhain_ppc_column=(
-                    ppc_column
-                ),
-
-                heidenhain_sav_column=(
-                    sav_column
-                ),
-
-                odoo_reference_column=(
-                    odoo_reference
-                ),
-
-                odoo_sales_status_column=(
-                    odoo_sales_status
-                ),
-
-                odoo_price_column=(
-                    odoo_price
-                ),
-
-                odoo_barcode_column=(
-                    odoo_barcode
-                ),
-
-                odoo_supplier_column=(
-                    odoo_supplier
-                ),
-
-                odoo_purchase_column=(
-                    odoo_purchase
-                ),
-
-                odoo_sale_column=(
-                    odoo_sale
-                ),
-
-                odoo_type_column=(
-                    odoo_type
-                ),
-
-                odoo_invoice_policy_column=(
-                    odoo_invoice_policy
-                ),
-
-                odoo_category_column=(
-                    odoo_category
-                ),
-            )
 
             st.session_state.odoo_result = (
                 result
