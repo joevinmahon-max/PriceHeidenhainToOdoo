@@ -2150,31 +2150,177 @@ st.header(
     "2️⃣ Mise en forme du fichier Odoo"
 )
 
-if (
-    heidenhain_file is None
-    or odoo_file is None
-    or category_file is None
-):
+st.info(
+    """
+    ⚠️ **Important :** pour l'étape 2, utilisez le fichier
+    généré par l'étape 1.
 
-    st.info(
-        "Importe les 3 fichiers pour lancer "
-        "la préparation Odoo."
+    L'application ne réutilise volontairement pas le fichier
+    Heidenhain original.
+    """
+)
+
+# ==========================================================
+# FICHIER PREPARE POUR L'ETAPE 2
+# ==========================================================
+
+prepared_heidenhain_file = st.file_uploader(
+    "📘 Importez ici le fichier Heidenhain préparé par l'étape 1",
+    type=[
+        "xlsx",
+        "xlsm",
+    ],
+    key="prepared_heidenhain_file",
+)
+
+# ==========================================================
+# VERIFICATION DU FICHIER PREPARE
+# ==========================================================
+
+prepared_stats = None
+
+if prepared_heidenhain_file is not None:
+
+    try:
+
+        prepared_stats = analyze_prepared_heidenhain(
+            uploaded_file=prepared_heidenhain_file,
+            sheet_name=heidenhain_sheet,
+            header_row=int(
+                heidenhain_header_row
+            ),
+            id_column=id_column,
+            status_column=status_column,
+        )
+
+        st.success(
+            "✅ Fichier Heidenhain préparé correctement chargé."
+        )
+
+        c1, c2, c3, c4 = st.columns(4)
+
+        with c1:
+
+            st.metric(
+                "Lignes",
+                f"{prepared_stats['total']:,}",
+            )
+
+        with c2:
+
+            st.metric(
+                "Lignes SAV",
+                f"{prepared_stats['sav']:,}",
+            )
+
+        with c3:
+
+            st.metric(
+                "VG",
+                f"{prepared_stats['vg']:,}",
+            )
+
+        with c4:
+
+            st.metric(
+                "PG",
+                f"{prepared_stats['pg']:,}",
+            )
+
+        # --------------------------------------------------
+        # CONTROLE CRITIQUE
+        # --------------------------------------------------
+
+        if prepared_stats["sav"] == 0:
+
+            st.error(
+                """
+                ❌ **Aucun produit SAV détecté dans ce fichier.**
+
+                Ce fichier ne doit pas être utilisé pour l'étape 2.
+
+                Vérifiez que vous avez bien téléchargé le fichier
+                généré à l'étape 1, puis réimportez-le ici.
+                """
+            )
+
+        else:
+
+            st.success(
+                f"✅ {prepared_stats['sav']:,} "
+                "références SAV détectées."
+            )
+
+    except Exception as e:
+
+        st.error(
+            "❌ Impossible de vérifier le fichier "
+            "Heidenhain préparé."
+        )
+
+        st.exception(e)
+
+
+# ==========================================================
+# CONDITIONS POUR LANCER L'ETAPE 2
+# ==========================================================
+
+can_run_step2 = (
+    prepared_heidenhain_file is not None
+    and odoo_file is not None
+    and category_file is not None
+    and prepared_stats is not None
+    and prepared_stats["sav"] > 0
+)
+
+
+if prepared_heidenhain_file is None:
+
+    st.warning(
+        "👆 Importez d'abord le fichier Heidenhain "
+        "généré par l'étape 1."
     )
 
-else:
+elif odoo_file is None:
+
+    st.warning(
+        "👆 Importez le fichier Odoo."
+    )
+
+elif category_file is None:
+
+    st.warning(
+        "👆 Importez le fichier Catégorie de produit."
+    )
+
+elif prepared_stats is not None and prepared_stats["sav"] == 0:
+
+    st.error(
+        "🚫 Étape 2 bloquée : aucun SAV détecté "
+        "dans le fichier fourni."
+    )
+
+
+# ==========================================================
+# LANCEMENT ETAPE 2
+# ==========================================================
+
+if can_run_step2:
 
     st.markdown(
         """
-        Le traitement va parcourir le fichier Heidenhain
-        et mettre à jour ou créer les références dans Odoo.
+        Le traitement va parcourir **le fichier Heidenhain préparé**
+        que vous venez d'importer et mettre à jour ou créer les
+        références dans Odoo.
 
         **Règles appliquées :**
 
         - Référence existante → mise à jour.
-        - Référence absente → création d'une nouvelle ligne.
-        - Prix normal → **Prix (PPC)**.
+        - Référence absente → création.
+        - Produit normal → **Prix (PPC)**.
         - Référence `_SAV` → **Prix (SAV)**.
-        - Code-barres → `I ` + référence.
+        - Produit normal → `I ` + référence comme code-barres.
+        - Produit `_SAV` → **code-barres vide**.
         - Fournisseur → `HEIDENHAIN FRANCE`.
         - Peut être acheté → `VRAI`.
         - Peut être vendu → `VRAI`.
@@ -2193,53 +2339,65 @@ else:
 
         try:
 
+            # ==================================================
+            # IMPORTANT :
+            # ON UTILISE LE FICHIER PREPARE
+            # ET NON PLUS LE FICHIER HEIDENHAIN ORIGINAL
+            # ==================================================
+
             result, stats = process_odoo(
-            heidenhain_file=heidenhain_file,
-            odoo_file=odoo_file,
-            category_file=category_file,
-        
-            heidenhain_sheet=heidenhain_sheet,
-            odoo_sheet=odoo_sheet,
-            category_sheet=category_sheet,
-        
-            heidenhain_header_row=int(heidenhain_header_row),
-            odoo_header_row=int(odoo_header_row),
-        
-            category_id_col=int(category_id_col),
-            category_search_col=int(category_search_col),
-        
-            heidenhain_id_column=id_column,
-            heidenhain_status_column=status_column,
-            heidenhain_group_column=group_column,
-            heidenhain_ppc_column=ppc_column,
-            heidenhain_sav_column=sav_column,
-        
-            heidenhain_description="Description",
-            heidenhain_marque="Marque",
-        
-            odoo_reference_column=odoo_reference,
-            odoo_sales_status_column=odoo_sales_status,
-            odoo_price_column=odoo_price,
-            odoo_barcode_column=odoo_barcode,
-            odoo_supplier_column=odoo_supplier,
-            odoo_purchase_column=odoo_purchase,
-            odoo_sale_column=odoo_sale,
-            odoo_type_column=odoo_type,
-            odoo_invoice_policy_column=odoo_invoice_policy,
-            odoo_category_column=odoo_category,
-        
-            odoo_name=odoo_name,
-            odoo_brand_description=odoo_brand_description,
-        )
+                heidenhain_file=(
+                    prepared_heidenhain_file
+                ),
+                odoo_file=odoo_file,
+                category_file=category_file,
 
+                heidenhain_sheet=heidenhain_sheet,
+                odoo_sheet=odoo_sheet,
+                category_sheet=category_sheet,
 
-            st.session_state.odoo_result = (
-                result
+                heidenhain_header_row=int(
+                    heidenhain_header_row
+                ),
+                odoo_header_row=int(
+                    odoo_header_row
+                ),
+
+                category_id_col=int(
+                    category_id_col
+                ),
+                category_search_col=int(
+                    category_search_col
+                ),
+
+                heidenhain_id_column=id_column,
+                heidenhain_status_column=status_column,
+                heidenhain_group_column=group_column,
+                heidenhain_ppc_column=ppc_column,
+                heidenhain_sav_column=sav_column,
+
+                heidenhain_description="Description",
+                heidenhain_marque="Marque",
+
+                odoo_reference_column=odoo_reference,
+                odoo_sales_status_column=odoo_sales_status,
+                odoo_price_column=odoo_price,
+                odoo_barcode_column=odoo_barcode,
+                odoo_supplier_column=odoo_supplier,
+                odoo_purchase_column=odoo_purchase,
+                odoo_sale_column=odoo_sale,
+                odoo_type_column=odoo_type,
+                odoo_invoice_policy_column=odoo_invoice_policy,
+                odoo_category_column=odoo_category,
+
+                odoo_name=odoo_name,
+                odoo_brand_description=(
+                    odoo_brand_description
+                ),
             )
 
-            st.session_state.odoo_stats = (
-                stats
-            )
+            st.session_state.odoo_result = result
+            st.session_state.odoo_stats = stats
 
             st.success(
                 "✅ Fichier Odoo préparé avec succès."
@@ -2252,6 +2410,7 @@ else:
             )
 
             st.exception(e)
+
 
 
 # ==========================================================
