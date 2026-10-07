@@ -2200,7 +2200,7 @@ if st.session_state.heidenhain_result:
             st.session_state.heidenhain_result
         ),
         file_name=(
-            "Prix_Heidenhain_prepare.xlsx"
+            "ETAPE 1 -- Products_Heidenhain_Prepare.xlsx"
         ),
         mime=(
             "application/vnd.openxmlformats-"
@@ -2421,7 +2421,7 @@ if st.session_state.odoo_result:
             st.session_state.odoo_result
         ),
         file_name=(
-            "Import_Odoo_Heidenhain_prepare.xlsx"
+            "ETAPE 2 -- File for import Odoo.xlsx"
         ),
         mime=(
             "application/vnd.openxmlformats-"
