@@ -1564,32 +1564,43 @@ def process_odoo(
 
         # ==================================================
         # NOM
+        # Depuis Description Heidenhain
+        # Écrit uniquement si la cellule Odoo est vide
         # ==================================================
         
-        description = h_ws.cell(
-            row=h_row,
-            column=h_columns[heidenhain_description],
-        ).value
+        description = row_values[
+            h_columns[heidenhain_description] - 1
+        ]
         
-        ws.cell(
+        name_cell = ws.cell(
             row=target_row,
             column=odoo_columns[odoo_name],
-        ).value = description
+        )
+        
+        if name_cell.value in (None, ""):
+        
+            name_cell.value = description
         
         
         # ==================================================
         # MARQUE / DESCRIPTION
+        # Depuis Marque Heidenhain
+        # Écrit uniquement si la cellule Odoo est vide
         # ==================================================
         
-        marque = h_ws.cell(
-            row=h_row,
-            column=h_columns[heidenhain_marque],
-        ).value
+        marque = row_values[
+            h_columns[heidenhain_marque] - 1
+        ]
         
-        ws.cell(
+        brand_cell = ws.cell(
             row=target_row,
             column=odoo_columns[odoo_brand_description],
-        ).value = marque
+        )
+        
+        if brand_cell.value in (None, ""):
+        
+            brand_cell.value = marque
+
 
         
         # ==================================================
