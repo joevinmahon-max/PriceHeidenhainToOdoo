@@ -1364,7 +1364,7 @@ else:
                 data_start_row=int(heidenhain_data_start_row),
                 status_column=status_column,
                 id_column=id_column,
-                output_columns=OUTPUT_COLUMNS,
+                OUTPUT_COLUMNS=OUTPUT_COLUMNS,
             )
             
             # Conserver le résultat après le rerun Streamlit
