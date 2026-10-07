@@ -1218,7 +1218,7 @@ def process_odoo(
 
     h_columns = find_columns(
         h_ws,
-        int(heidenhain_header_row),
+        1,
         h_column_names,
     )
 
@@ -1433,10 +1433,7 @@ def process_odoo(
     # 9. PARCOURS HEIDENHAIN
     # ======================================================
 
-    heidenhain_data_start = (
-        int(heidenhain_header_row)
-        + 1
-    )
+    heidenhain_data_start = 2
 
     total_h_rows = max(
         0,
