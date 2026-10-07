@@ -1888,8 +1888,8 @@ odoo_name = st.sidebar.text_input(
 )
 
 odoo_brand_description = st.sidebar.text_input(
-    "Marque/Description",
-    "Marque/Description",
+    "Marque",
+    "Marque",
 )
 
 
