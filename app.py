@@ -1113,6 +1113,7 @@ def process_odoo(
     heidenhain_sav_column,
     heidenhain_description,
     heidenhain_marque,
+    heidenhain_prixHA,
 
     odoo_reference_column,
     odoo_sales_status_column,
@@ -1126,6 +1127,7 @@ def process_odoo(
     odoo_category_column,
     odoo_name,
     odoo_brand_description,
+    odoo_supplier_price,
 ):
 
     # ======================================================
@@ -1201,6 +1203,7 @@ def process_odoo(
         heidenhain_sav_column,
         heidenhain_description,
         heidenhain_marque,
+        heidenhain_prixHA,
     ]
 
     h_columns = find_columns(
@@ -1278,6 +1281,7 @@ def process_odoo(
         odoo_category_column,
         odoo_name,
         odoo_brand_description,
+        odoo_supplier_price,
     ]
 
     odoo_columns = find_columns(
@@ -1395,6 +1399,12 @@ def process_odoo(
     col_category = odoo_columns[
         odoo_category_column
     ]
+    
+    col_supplier_price = odoo_columns[
+    odoo_supplier_price
+    ]
+
+
 
     # ======================================================
     # 8. STATISTIQUES
@@ -1458,6 +1468,11 @@ def process_odoo(
         heidenhain_sav_column
     ]
 
+    h_prixHA_col = h_columns[
+    heidenhain_prixHA
+    ]
+
+
     # ======================================================
     # BOUCLE PRINCIPALE
     # ======================================================
@@ -1494,6 +1509,11 @@ def process_odoo(
             sav = row_values[
                 h_sav_col - 1
             ]
+
+            prixHA = row_values[
+            h_prixHA_col - 1
+            ]
+
 
         except IndexError:
 
@@ -1680,6 +1700,12 @@ def process_odoo(
             row=target_row,
             column=col_price,
         ).value = price
+
+        ws.cell(
+        row=target_row,
+        column=col_supplier_price,
+        ).value = prixHA
+
 
         # ==================================================
         # CODE-BARRES
@@ -1900,7 +1926,10 @@ sav_column = st.sidebar.text_input(
     "Prix (SAV)",
 )
 
-
+heidenhain_prixHA = st.sidebar.text_input(
+    "Colonne Prix HA",
+    "Prix HA €",
+)
 
 
 # ==========================================================
@@ -1984,6 +2013,12 @@ odoo_category = st.sidebar.text_input(
     "Catégorie de produits/ID",
     "Catégorie de produits/ID",
 )
+
+odoo_supplier_price = st.sidebar.text_input(
+    "Fournisseurs/Prix",
+    "Fournisseurs/Prix",
+)
+
 
 
 # ==========================================================
@@ -2269,6 +2304,7 @@ else:
         
             heidenhain_description="Description",
             heidenhain_marque="Marque",
+            heidenhain_prixHA=heidenhain_prixHA,
         
             odoo_reference_column=odoo_reference,
             odoo_sales_status_column=odoo_sales_status,
@@ -2283,6 +2319,7 @@ else:
         
             odoo_name=odoo_name,
             odoo_brand_description=odoo_brand_description,
+            odoo_supplier_price=odoo_supplier_price,
         )
 
 
