@@ -321,27 +321,27 @@ def copy_heidenhain_row(
 
        if column_name == "Prix (SAV)":
 
-            target_cell.value = (
-                values_ws.cell(
-                    row=source_row,
-                    column=source_col,
-                ).value
-            )
-        
-        elif column_name == "Prix HA €":
-        
-            target_cell.value = (
-                values_ws.cell(
-                    row=source_row,
-                    column=source_col,
-                ).value
-            )
-        
-        else:
-        
-            target_cell.value = (
-                source_cell.value
-            )
+        target_cell.value = (
+            values_ws.cell(
+                row=source_row,
+                column=source_col,
+            ).value
+        )
+    
+    elif column_name == "Prix HA €":
+    
+        target_cell.value = (
+            values_ws.cell(
+                row=source_row,
+                column=source_col,
+            ).value
+        )
+    
+    else:
+    
+        target_cell.value = (
+            source_cell.value
+        )
 
         copy_style_safe(
             source_cell,
