@@ -485,7 +485,34 @@ def process_heidenhain(
         id_column
     ]
 
-    max_row = source_ws.max_row
+    # ======================================================
+    # DERNIÈRE LIGNE RÉELLEMENT REMPLIE
+    # On s'arrête dès que la colonne ID est vide.
+    # Cela évite de traiter les milliers de lignes
+    # supplémentaires créées uniquement par la mise en forme Excel.
+    # ======================================================
+    
+    max_row = data_start_row - 1
+    
+    for row in range(
+        data_start_row,
+        source_ws.max_row + 1,
+    ):
+    
+        id_value = source_ws.cell(
+            row=row,
+            column=id_col,
+        ).value
+    
+        if id_value in (None, ""):
+            break
+    
+        max_row = row
+    
+    total_rows = max(
+        0,
+        max_row - data_start_row + 1,
+    )
 
     total_rows = max(
         0,
