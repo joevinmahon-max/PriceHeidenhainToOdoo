@@ -1081,228 +1081,228 @@ def analyze_heidenhain(
     ws = workbook[sheet_name]
 
     # ==========================================================
-# ANALYSE COMPLETE DU FICHIER
-# ==========================================================
-
-if heidenhain_file is not None:
-
-    st.divider()
-
-    st.header(
-        "🔎 Analyse du fichier Heidenhain"
-    )
-
-    try:
-
-        analysis = analyze_heidenhain(
-            uploaded_file=heidenhain_file,
-            sheet_name=heidenhain_sheet,
-            header_row=int(
-                heidenhain_header_row
-            ),
-            data_start_row=int(
-                heidenhain_data_start_row
-            ),
-            status_column=status_column,
-            id_column=id_column,
+    # ANALYSE COMPLETE DU FICHIER
+    # ==========================================================
+    
+    if heidenhain_file is not None:
+    
+        st.divider()
+    
+        st.header(
+            "🔎 Analyse du fichier Heidenhain"
         )
-
-        st.success(
-            "✅ Fichier complet analysé."
-        )
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        with c1:
-            st.metric(
-                "Lignes du fichier",
-                f"{analysis['total_rows']:,}",
-            )
-
-        with c2:
-            st.metric(
-                "Statut VG",
-                f"{analysis['vg_count']:,}",
-            )
-
-        with c3:
-            st.metric(
-                "Statut PG",
-                f"{analysis['pg_count']:,}",
-            )
-
-        with c4:
-            st.metric(
-                "VG + PG",
-                f"{analysis['vg_pg_count']:,}",
-            )
-
-        if analysis["empty_ids"]:
-
-            st.warning(
-                f"{analysis['empty_ids']:,} "
-                "ligne(s) ont un ID vide."
-            )
-
-    except Exception as e:
-
-        st.error(
-            f"Erreur lors de l'analyse du fichier : {e}"
-        )
-
-
-    # ------------------------------------------------------
-    # Recherche des colonnes
-    # ------------------------------------------------------
-
-    source_columns = find_columns_by_headers(
-        ws,
-        header_row,
-        [
-            status_column,
-            id_column,
-        ],
-    )
-
-    missing_columns = [
-        column
-        for column in [
-            status_column,
-            id_column,
-        ]
-        if column not in source_columns
-    ]
-
-    if missing_columns:
-        workbook.close()
-
-        raise ValueError(
-            "Colonnes introuvables sur la ligne "
-            f"{header_row} : "
-            + ", ".join(missing_columns)
-        )
-
-    status_col = source_columns[status_column]
-    id_col = source_columns[id_column]
-
-    # ------------------------------------------------------
-    # Analyse complète
-    # ------------------------------------------------------
-
-    max_row = ws.max_row
-
-    total_rows = max(
-        0,
-        max_row - data_start_row + 1,
-    )
-
-    vg_count = 0
-    pg_count = 0
-    empty_id_count = 0
-    total_ids = 0
-
-    existing_ids = set()
-
-    progress = st.progress(
-        0,
-        text="Analyse complète du fichier Heidenhain...",
-    )
-
-    for index, row in enumerate(
-        range(
-            data_start_row,
-            max_row + 1,
-        )
-    ):
-
-        # --------------------------------------------------
-        # ID
-        # --------------------------------------------------
-
-        id_value = ws.cell(
-            row=row,
-            column=id_col,
-        ).value
-
-        normalized_id = normalize_value(
-            id_value
-        )
-
-        if normalized_id:
-
-            existing_ids.add(
-                normalized_id
-            )
-
-            total_ids += 1
-
-        else:
-
-            empty_id_count += 1
-
-        # --------------------------------------------------
-        # STATUT
-        # --------------------------------------------------
-
-        status = normalize_value(
-            ws.cell(
-                row=row,
-                column=status_col,
-            ).value
-        )
-
-        if status == "VG":
-
-            vg_count += 1
-
-        elif status == "PG":
-
-            pg_count += 1
-
-        # --------------------------------------------------
-        # Progression
-        # --------------------------------------------------
-
-        if (
-            index % 5000 == 0
-            or index == total_rows - 1
-        ):
-
-            percent = int(
-                (
-                    (index + 1)
-                    / max(1, total_rows)
-                )
-                * 100
-            )
-
-            progress.progress(
-                min(percent, 100),
-                text=(
-                    "Analyse complète du fichier... "
-                    f"{index + 1:,} / "
-                    f"{total_rows:,}"
+    
+        try:
+    
+            analysis = analyze_heidenhain(
+                uploaded_file=heidenhain_file,
+                sheet_name=heidenhain_sheet,
+                header_row=int(
+                    heidenhain_header_row
                 ),
+                data_start_row=int(
+                    heidenhain_data_start_row
+                ),
+                status_column=status_column,
+                id_column=id_column,
             )
-
-    workbook.close()
-
-    progress.empty()
-
-    return {
-        "total_rows": total_rows,
-        "vg_count": vg_count,
-        "pg_count": pg_count,
-        "vg_pg_count": (
-            vg_count + pg_count
-        ),
-        "total_ids": total_ids,
-        "empty_ids": empty_id_count,
-        "existing_ids": existing_ids,
-        "max_row": max_row,
-        "status_column_number": status_col,
-        "id_column_number": id_col,
-    }
+    
+            st.success(
+                "✅ Fichier complet analysé."
+            )
+    
+            c1, c2, c3, c4 = st.columns(4)
+    
+            with c1:
+                st.metric(
+                    "Lignes du fichier",
+                    f"{analysis['total_rows']:,}",
+                )
+    
+            with c2:
+                st.metric(
+                    "Statut VG",
+                    f"{analysis['vg_count']:,}",
+                )
+    
+            with c3:
+                st.metric(
+                    "Statut PG",
+                    f"{analysis['pg_count']:,}",
+                )
+    
+            with c4:
+                st.metric(
+                    "VG + PG",
+                    f"{analysis['vg_pg_count']:,}",
+                )
+    
+            if analysis["empty_ids"]:
+    
+                st.warning(
+                    f"{analysis['empty_ids']:,} "
+                    "ligne(s) ont un ID vide."
+                )
+    
+        except Exception as e:
+    
+            st.error(
+                f"Erreur lors de l'analyse du fichier : {e}"
+            )
+    
+    
+        # ------------------------------------------------------
+        # Recherche des colonnes
+        # ------------------------------------------------------
+    
+        source_columns = find_columns_by_headers(
+            ws,
+            header_row,
+            [
+                status_column,
+                id_column,
+            ],
+        )
+    
+        missing_columns = [
+            column
+            for column in [
+                status_column,
+                id_column,
+            ]
+            if column not in source_columns
+        ]
+    
+        if missing_columns:
+            workbook.close()
+    
+            raise ValueError(
+                "Colonnes introuvables sur la ligne "
+                f"{header_row} : "
+                + ", ".join(missing_columns)
+            )
+    
+        status_col = source_columns[status_column]
+        id_col = source_columns[id_column]
+    
+        # ------------------------------------------------------
+        # Analyse complète
+        # ------------------------------------------------------
+    
+        max_row = ws.max_row
+    
+        total_rows = max(
+            0,
+            max_row - data_start_row + 1,
+        )
+    
+        vg_count = 0
+        pg_count = 0
+        empty_id_count = 0
+        total_ids = 0
+    
+        existing_ids = set()
+    
+        progress = st.progress(
+            0,
+            text="Analyse complète du fichier Heidenhain...",
+        )
+    
+        for index, row in enumerate(
+            range(
+                data_start_row,
+                max_row + 1,
+            )
+        ):
+    
+            # --------------------------------------------------
+            # ID
+            # --------------------------------------------------
+    
+            id_value = ws.cell(
+                row=row,
+                column=id_col,
+            ).value
+    
+            normalized_id = normalize_value(
+                id_value
+            )
+    
+            if normalized_id:
+    
+                existing_ids.add(
+                    normalized_id
+                )
+    
+                total_ids += 1
+    
+            else:
+    
+                empty_id_count += 1
+    
+            # --------------------------------------------------
+            # STATUT
+            # --------------------------------------------------
+    
+            status = normalize_value(
+                ws.cell(
+                    row=row,
+                    column=status_col,
+                ).value
+            )
+    
+            if status == "VG":
+    
+                vg_count += 1
+    
+            elif status == "PG":
+    
+                pg_count += 1
+    
+            # --------------------------------------------------
+            # Progression
+            # --------------------------------------------------
+    
+            if (
+                index % 5000 == 0
+                or index == total_rows - 1
+            ):
+    
+                percent = int(
+                    (
+                        (index + 1)
+                        / max(1, total_rows)
+                    )
+                    * 100
+                )
+    
+                progress.progress(
+                    min(percent, 100),
+                    text=(
+                        "Analyse complète du fichier... "
+                        f"{index + 1:,} / "
+                        f"{total_rows:,}"
+                    ),
+                )
+    
+        workbook.close()
+    
+        progress.empty()
+    
+        return {
+            "total_rows": total_rows,
+            "vg_count": vg_count,
+            "pg_count": pg_count,
+            "vg_pg_count": (
+                vg_count + pg_count
+            ),
+            "total_ids": total_ids,
+            "empty_ids": empty_id_count,
+            "existing_ids": existing_ids,
+            "max_row": max_row,
+            "status_column_number": status_col,
+            "id_column_number": id_col,
+        }
 
 
 # ==========================================================
