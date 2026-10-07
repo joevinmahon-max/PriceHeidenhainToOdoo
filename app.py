@@ -697,470 +697,8 @@ def process_heidenhain(
 
     return data, stats
 
-
 # ==========================================================
 # ETAPE 2
-# ODOO — VERSION OPTIMISEE
-# ==========================================================
-
-
-# ==========================================================
-# CHARGEMENT DU FICHIER CATEGORIE
-# ==========================================================
-
-def load_category_mapping(
-    category_file,
-    category_sheet,
-    category_id_col,
-    category_search_col,
-):
-    """
-    Charge le fichier Catégorie de produit UNE SEULE FOIS.
-
-    Construit plusieurs index pour permettre une recherche
-    très rapide ensuite.
-
-    Exemple :
-
-        Colonne B = 20
-        Colonne C = 20 - Métrologie
-
-    permettra de retrouver :
-
-        "20"
-        -> "20"
-
-    """
-
-    category_file.seek(0)
-
-    wb = openpyxl.load_workbook(
-        category_file,
-        data_only=True,
-        read_only=True,
-    )
-
-    if category_sheet not in wb.sheetnames:
-
-        names = ", ".join(wb.sheetnames)
-
-        wb.close()
-
-        raise ValueError(
-            f"Feuille catégorie '{category_sheet}' "
-            f"introuvable.\n\n"
-            f"Feuilles disponibles : {names}"
-        )
-
-    ws = wb[category_sheet]
-
-    # ------------------------------------------------------
-    # INDEX PRINCIPAL
-    # ------------------------------------------------------
-
-    mapping = {}
-
-    # ------------------------------------------------------
-    # PARCOURS UNIQUE DU FICHIER
-    # ------------------------------------------------------
-
-    for row in ws.iter_rows(
-        min_row=1,
-        values_only=True,
-    ):
-
-        # --------------------------------------------------
-        # Vérification des indices
-        # --------------------------------------------------
-
-        id_index = category_id_col - 1
-        search_index = category_search_col - 1
-
-        if (
-            id_index >= len(row)
-            or search_index >= len(row)
-        ):
-            continue
-
-        category_id = row[id_index]
-        category_text = row[search_index]
-
-        if (
-            category_id is None
-            or category_text is None
-        ):
-            continue
-
-        category_id = str(
-            category_id
-        ).strip()
-
-        category_text = str(
-            category_text
-        ).strip()
-
-        if not category_id or not category_text:
-            continue
-
-        normalized_text = normalize(
-            category_text
-        )
-
-        # --------------------------------------------------
-        # Recherche exacte du texte complet
-        # --------------------------------------------------
-
-        if normalized_text not in mapping:
-
-            mapping[
-                normalized_text
-            ] = category_id
-
-        # --------------------------------------------------
-        # Recherche du premier élément avant "-"
-        #
-        # Exemple :
-        #
-        # "20 - METROLOGIE"
-        #
-        # crée aussi :
-        #
-        # "20" -> ID
-        # --------------------------------------------------
-
-        if "-" in category_text:
-
-            first_part = (
-                category_text
-                .split("-", 1)[0]
-                .strip()
-            )
-
-            if first_part:
-
-                normalized_first_part = normalize(
-                    first_part
-                )
-
-                if (
-                    normalized_first_part
-                    not in mapping
-                ):
-
-                    mapping[
-                        normalized_first_part
-                    ] = category_id
-
-    wb.close()
-
-    return mapping
-
-
-# ==========================================================
-# RECHERCHE CATEGORIE EN MEMOIRE
-# ==========================================================
-
-def find_category_id_fast(
-    groupe_produit,
-    category_mapping,
-):
-    """
-    Recherche une catégorie dans le dictionnaire
-    chargé en mémoire.
-
-    Aucun accès Excel ici.
-
-    Exemple :
-
-        Groupe Produit :
-            "20 - Métrologie"
-
-        Recherche :
-            "20 - METROLOGIE"
-            puis
-            "20"
-
-    """
-
-    if groupe_produit is None:
-        return None
-
-    group = str(
-        groupe_produit
-    ).strip()
-
-    if not group:
-        return None
-
-    normalized_group = normalize(
-        group
-    )
-
-    # ------------------------------------------------------
-    # 1. Recherche exacte
-    # ------------------------------------------------------
-
-    if normalized_group in category_mapping:
-
-        return category_mapping[
-            normalized_group
-        ]
-
-    # ------------------------------------------------------
-    # 2. Recherche de la partie avant "-"
-    # ------------------------------------------------------
-
-    if "-" in group:
-
-        first_part = (
-            group
-            .split("-", 1)[0]
-            .strip()
-        )
-
-        if first_part:
-
-            normalized_first = normalize(
-                first_part
-            )
-
-            if normalized_first in category_mapping:
-
-                return category_mapping[
-                    normalized_first
-                ]
-
-    # ------------------------------------------------------
-    # 3. Dernière sécurité :
-    # recherche du terme dans les clés.
-    #
-    # Cette partie est beaucoup plus rare.
-    # ------------------------------------------------------
-
-    for key, category_id in category_mapping.items():
-
-        if (
-            normalized_group
-            and normalized_group in key
-        ):
-
-            return category_id
-
-    return None
-
-
-# ==========================================================
-# INDEX DES REFERENCES ODOO
-# ==========================================================
-
-def build_odoo_reference_index(
-    ws,
-    reference_column,
-    header_row,
-):
-    """
-    Parcourt Odoo UNE SEULE FOIS et crée :
-
-        référence -> numéro de ligne
-
-    """
-
-    reference_index = {}
-
-    max_row = ws.max_row
-
-    for row in range(
-        header_row + 1,
-        max_row + 1,
-    ):
-
-        value = ws.cell(
-            row=row,
-            column=reference_column,
-        ).value
-
-        ref = clean_reference(
-            value
-        )
-
-        if not ref:
-            continue
-
-        # Première occurrence conservée
-
-        if ref not in reference_index:
-
-            reference_index[
-                ref
-            ] = row
-
-    return reference_index
-
-
-# ==========================================================
-# COPIE DU STYLE D'UNE LIGNE
-# ==========================================================
-
-def copy_odoo_row_style(
-    ws,
-    source_row,
-    target_row,
-    max_col,
-):
-    """
-    Copie uniquement le style de la ligne modèle.
-
-    Les valeurs ne sont PAS copiées.
-    """
-
-    for col in range(
-        1,
-        max_col + 1,
-    ):
-
-        source = ws.cell(
-            row=source_row,
-            column=col,
-        )
-
-        target = ws.cell(
-            row=target_row,
-            column=col,
-        )
-
-        copy_style_safe(
-            source,
-            target,
-        )
-
-    # Hauteur
-
-    try:
-
-        ws.row_dimensions[
-            target_row
-        ].height = (
-            ws.row_dimensions[
-                source_row
-            ].height
-        )
-
-    except Exception:
-
-        pass
-
-
-# ==========================================================
-# ECRITURE DES DONNEES ODOO
-# ==========================================================
-
-def write_odoo_row(
-    ws,
-    row,
-    columns,
-    reference,
-    status,
-    price,
-    category_id,
-):
-    """
-    Ecrit toutes les valeurs d'une ligne Odoo.
-    """
-
-    # ------------------------------------------------------
-    # Référence
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["reference"],
-    ).value = reference
-
-    # ------------------------------------------------------
-    # Sales Status
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["sales_status"],
-    ).value = status
-
-    # ------------------------------------------------------
-    # Prix
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["price"],
-    ).value = price
-
-    # ------------------------------------------------------
-    # Code-barres
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["barcode"],
-    ).value = f"I {reference}"
-
-    # ------------------------------------------------------
-    # Fournisseur
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["supplier"],
-    ).value = "HEIDENHAIN FRANCE"
-
-    # ------------------------------------------------------
-    # Peut être acheté
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["purchase"],
-    ).value = "VRAI"
-
-    # ------------------------------------------------------
-    # Peut être vendu
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["sale"],
-    ).value = "VRAI"
-
-    # ------------------------------------------------------
-    # Type de produit
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["type"],
-    ).value = "Consommable"
-
-    # ------------------------------------------------------
-    # Politique de facturation
-    # ------------------------------------------------------
-
-    ws.cell(
-        row=row,
-        column=columns["invoice_policy"],
-    ).value = "Quantités livrées"
-
-    # ------------------------------------------------------
-    # Catégorie
-    # ------------------------------------------------------
-
-    if category_id is not None:
-
-        ws.cell(
-            row=row,
-            column=columns["category"],
-        ).value = category_id
-
-
-# ==========================================================
 # TRAITEMENT ODOO OPTIMISE
 # ==========================================================
 
@@ -1198,26 +736,32 @@ def process_odoo(
 ):
 
     # ======================================================
-    # 1. CHARGEMENT DU FICHIER CATEGORIE
+    # 1. CHARGEMENT DES CATEGORIES
     # ======================================================
 
     progress = st.progress(
         0,
-        text="Chargement des catégories...",
+        text="Étape 2 — Chargement des catégories...",
     )
 
-    category_mapping = load_category_mapping(
-        category_file=category_file,
-        category_sheet=category_sheet,
-        category_id_col=int(category_id_col),
-        category_search_col=int(category_search_col),
+    category_mapping, category_rows = (
+        load_category_mapping(
+            category_file=category_file,
+            category_sheet=category_sheet,
+            category_id_col=int(
+                category_id_col
+            ),
+            category_search_col=int(
+                category_search_col
+            ),
+        )
     )
 
     progress.progress(
         10,
         text=(
-            f"Catégories chargées : "
-            f"{len(category_mapping):,}"
+            "Catégories chargées : "
+            f"{category_rows:,}"
         ),
     )
 
@@ -1243,7 +787,8 @@ def process_odoo(
 
         raise ValueError(
             f"Feuille Heidenhain "
-            f"'{heidenhain_sheet}' introuvable.\n\n"
+            f"'{heidenhain_sheet}' "
+            f"introuvable.\n"
             f"Feuilles disponibles : {names}"
         )
 
@@ -1255,7 +800,7 @@ def process_odoo(
     # 3. COLONNES HEIDENHAIN
     # ======================================================
 
-    heidenhain_columns = [
+    h_column_names = [
         heidenhain_id_column,
         heidenhain_status_column,
         heidenhain_group_column,
@@ -1266,13 +811,13 @@ def process_odoo(
     h_columns = find_columns(
         h_ws,
         int(heidenhain_header_row),
-        heidenhain_columns,
+        h_column_names,
     )
 
     missing_h = [
-        column
-        for column in heidenhain_columns
-        if column not in h_columns
+        x
+        for x in h_column_names
+        if x not in h_columns
     ]
 
     if missing_h:
@@ -1280,10 +825,15 @@ def process_odoo(
         wb_h.close()
 
         raise ValueError(
-            "Colonnes introuvables dans le fichier "
-            "Heidenhain : "
+            "Colonnes introuvables "
+            "dans le fichier 3 : "
             + ", ".join(missing_h)
         )
+
+    progress.progress(
+        20,
+        text="Fichier Heidenhain chargé...",
+    )
 
     # ======================================================
     # 4. OUVERTURE ODOO
@@ -1307,7 +857,8 @@ def process_odoo(
 
         raise ValueError(
             f"Feuille Odoo "
-            f"'{odoo_sheet}' introuvable.\n\n"
+            f"'{odoo_sheet}' "
+            f"introuvable.\n"
             f"Feuilles disponibles : {names}"
         )
 
@@ -1316,7 +867,7 @@ def process_odoo(
     ]
 
     # ======================================================
-    # 5. RECHERCHE DES COLONNES ODOO
+    # 5. COLONNES ODOO
     # ======================================================
 
     odoo_column_names = [
@@ -1332,16 +883,16 @@ def process_odoo(
         odoo_category_column,
     ]
 
-    odoo_found = find_columns(
+    odoo_columns = find_columns(
         ws,
         int(odoo_header_row),
         odoo_column_names,
     )
 
     missing_odoo = [
-        column
-        for column in odoo_column_names
-        if column not in odoo_found
+        x
+        for x in odoo_column_names
+        if x not in odoo_columns
     ]
 
     if missing_odoo:
@@ -1350,32 +901,57 @@ def process_odoo(
         wb_h.close()
 
         raise ValueError(
-            "Colonnes introuvables dans Odoo : "
+            "Colonnes introuvables "
+            "dans Odoo : "
             + ", ".join(missing_odoo)
         )
 
-    # ======================================================
-    # 6. CREATION D'UN INDEX ODOO
-    # ======================================================
-
-    progress.progress(
-        20,
-        text="Indexation des références Odoo...",
-    )
-
-    reference_index = build_odoo_reference_index(
-        ws=ws,
-        reference_column=odoo_found[
-            odoo_reference_column
-        ],
-        header_row=int(odoo_header_row),
-    )
-
     progress.progress(
         30,
+        text="Fichier Odoo chargé...",
+    )
+
+    # ======================================================
+    # 6. INDEX DES REFERENCES ODOO
+    #
+    # Une seule lecture du fichier.
+    # ======================================================
+
+    reference_index = {}
+
+    reference_col = odoo_columns[
+        odoo_reference_column
+    ]
+
+    max_odoo_row = ws.max_row
+
+    for row in range(
+        int(odoo_header_row) + 1,
+        max_odoo_row + 1,
+    ):
+
+        value = ws.cell(
+            row=row,
+            column=reference_col,
+        ).value
+
+        ref = clean_reference(
+            value
+        )
+
+        if ref:
+
+            if ref not in reference_index:
+
+                reference_index[
+                    ref
+                ] = row
+
+    progress.progress(
+        40,
         text=(
-            f"Références Odoo indexées : "
-            f"{len(reference_index):,}"
+            "Index Odoo créé : "
+            f"{len(reference_index):,} références"
         ),
     )
 
@@ -1383,221 +959,249 @@ def process_odoo(
     # 7. PREPARATION DES COLONNES
     # ======================================================
 
-    columns = {
-        "reference": odoo_found[
-            odoo_reference_column
-        ],
+    col_ref = odoo_columns[
+        odoo_reference_column
+    ]
 
-        "sales_status": odoo_found[
-            odoo_sales_status_column
-        ],
+    col_status = odoo_columns[
+        odoo_sales_status_column
+    ]
 
-        "price": odoo_found[
-            odoo_price_column
-        ],
+    col_price = odoo_columns[
+        odoo_price_column
+    ]
 
-        "barcode": odoo_found[
-            odoo_barcode_column
-        ],
+    col_barcode = odoo_columns[
+        odoo_barcode_column
+    ]
 
-        "supplier": odoo_found[
-            odoo_supplier_column
-        ],
+    col_supplier = odoo_columns[
+        odoo_supplier_column
+    ]
 
-        "purchase": odoo_found[
-            odoo_purchase_column
-        ],
+    col_purchase = odoo_columns[
+        odoo_purchase_column
+    ]
 
-        "sale": odoo_found[
-            odoo_sale_column
-        ],
+    col_sale = odoo_columns[
+        odoo_sale_column
+    ]
 
-        "type": odoo_found[
-            odoo_type_column
-        ],
+    col_type = odoo_columns[
+        odoo_type_column
+    ]
 
-        "invoice_policy": odoo_found[
-            odoo_invoice_policy_column
-        ],
+    col_invoice = odoo_columns[
+        odoo_invoice_policy_column
+    ]
 
-        "category": odoo_found[
-            odoo_category_column
-        ],
-    }
+    col_category = odoo_columns[
+        odoo_category_column
+    ]
 
     # ======================================================
-    # 8. PARAMETRES DE LECTURE HEIDENHAIN
+    # 8. STATISTIQUES
     # ======================================================
-
-    h_header_row = int(
-        heidenhain_header_row
-    )
-
-    h_data_start = (
-        h_header_row + 1
-    )
-
-    h_max_row = h_ws.max_row
-
-    total_h_rows = max(
-        0,
-        h_max_row - h_data_start + 1,
-    )
-
-    # ======================================================
-    # 9. STATISTIQUES
-    # ======================================================
-
-    references_processed = 0
 
     updated = 0
-
     created = 0
 
     category_found = 0
-
     category_missing = 0
 
-    sav_count = 0
-
-    normal_count = 0
-
-    empty_reference_count = 0
+    references_processed = 0
+    empty_references = 0
 
     # ======================================================
-    # 10. DERNIERE LIGNE ODOO
+    # 9. PARCOURS HEIDENHAIN
     # ======================================================
 
-    next_row = max(
-        ws.max_row + 1,
-        int(odoo_header_row) + 1,
+    heidenhain_data_start = (
+        int(heidenhain_header_row)
+        + 1
     )
 
-    template_row = (
-        next_row - 1
-        if next_row > int(odoo_header_row) + 1
-        else None
+    total_h_rows = max(
+        0,
+        h_ws.max_row
+        - heidenhain_data_start
+        + 1,
     )
-
-    # ======================================================
-    # 11. TRAITEMENT HEIDENHAIN
-    # ======================================================
 
     progress.progress(
-        30,
-        text="Mise à jour du fichier Odoo...",
+        45,
+        text=(
+            f"Traitement de "
+            f"{total_h_rows:,} lignes..."
+        ),
     )
 
-    for index, h_row in enumerate(
-        range(
-            h_data_start,
-            h_max_row + 1,
-        ),
-        start=1,
+    # ======================================================
+    # OPTIMISATION :
+    # références de colonnes stockées localement
+    # ======================================================
+
+    h_id_col = h_columns[
+        heidenhain_id_column
+    ]
+
+    h_status_col = h_columns[
+        heidenhain_status_column
+    ]
+
+    h_group_col = h_columns[
+        heidenhain_group_column
+    ]
+
+    h_ppc_col = h_columns[
+        heidenhain_ppc_column
+    ]
+
+    h_sav_col = h_columns[
+        heidenhain_sav_column
+    ]
+
+    # ======================================================
+    # BOUCLE PRINCIPALE
+    # ======================================================
+
+    for index, row_values in enumerate(
+        h_ws.iter_rows(
+            min_row=heidenhain_data_start,
+            values_only=True,
+        )
     ):
 
         # --------------------------------------------------
-        # ID / REFERENCE
+        # Lecture rapide des valeurs
         # --------------------------------------------------
 
-        reference_value = h_ws.cell(
-            row=h_row,
-            column=h_columns[
-                heidenhain_id_column
-            ],
-        ).value
+        try:
 
-        if reference_value is None:
+            reference = row_values[
+                h_id_col - 1
+            ]
 
-            empty_reference_count += 1
+            status = row_values[
+                h_status_col - 1
+            ]
+
+            groupe = row_values[
+                h_group_col - 1
+            ]
+
+            ppc = row_values[
+                h_ppc_col - 1
+            ]
+
+            sav = row_values[
+                h_sav_col - 1
+            ]
+
+        except IndexError:
+
+            continue
+
+        # --------------------------------------------------
+        # Référence
+        # --------------------------------------------------
+
+        if reference is None:
+
+            empty_references += 1
 
             continue
 
         reference = str(
-            reference_value
+            reference
         ).strip()
 
         if not reference:
 
-            empty_reference_count += 1
+            empty_references += 1
 
             continue
 
         references_processed += 1
 
-        normalized_reference = clean_reference(
+        normalized_ref = clean_reference(
             reference
         )
 
-        # --------------------------------------------------
-        # STATUT
-        # --------------------------------------------------
+        # ==================================================
+        # RECHERCHE ODOO
+        # ==================================================
 
-        status = h_ws.cell(
-            row=h_row,
-            column=h_columns[
-                heidenhain_status_column
-            ],
-        ).value
+        if (
+            normalized_ref
+            in reference_index
+        ):
 
-        # --------------------------------------------------
-        # GROUPE PRODUIT
-        # --------------------------------------------------
+            target_row = (
+                reference_index[
+                    normalized_ref
+                ]
+            )
 
-        groupe = h_ws.cell(
-            row=h_row,
-            column=h_columns[
-                heidenhain_group_column
-            ],
-        ).value
+            updated += 1
 
-        # --------------------------------------------------
-        # PRIX PPC
-        # --------------------------------------------------
+        else:
 
-        ppc = h_ws.cell(
-            row=h_row,
-            column=h_columns[
-                heidenhain_ppc_column
-            ],
-        ).value
+            target_row = (
+                ws.max_row + 1
+            )
 
-        # --------------------------------------------------
-        # PRIX SAV
-        # --------------------------------------------------
+            # --------------------------------------------------
+            # Pour une nouvelle ligne :
+            # on copie le style de la dernière ligne.
+            # --------------------------------------------------
 
-        sav = h_ws.cell(
-            row=h_row,
-            column=h_columns[
-                heidenhain_sav_column
-            ],
-        ).value
+            if target_row > (
+                int(odoo_header_row)
+                + 1
+            ):
 
-        # --------------------------------------------------
-        # DETERMINATION DU PRIX
-        # --------------------------------------------------
+                template_row = (
+                    target_row - 1
+                )
+
+                copy_row_style(
+                    ws,
+                    template_row,
+                    target_row,
+                    ws.max_column,
+                )
+
+            reference_index[
+                normalized_ref
+            ] = target_row
+
+            created += 1
+
+        # ==================================================
+        # PRIX
+        # ==================================================
 
         if is_sav(reference):
 
             price = sav
 
-            sav_count += 1
-
         else:
 
             price = ppc
 
-            normal_count += 1
-
-        # --------------------------------------------------
-        # RECHERCHE CATEGORIE
+        # ==================================================
+        # CATEGORIE
         #
-        # ICI AUCUN ACCES AU FICHIER EXCEL.
-        # --------------------------------------------------
+        # Recherche en mémoire.
+        # Aucun fichier n'est rouvert.
+        # ==================================================
 
-        category_id = find_category_id_fast(
-            groupe_produit=groupe,
-            category_mapping=category_mapping,
+        category_id = (
+            find_category_id_fast(
+                groupe_produit=groupe,
+                category_mapping=category_mapping,
+            )
         )
 
         if category_id is not None:
@@ -1608,107 +1212,113 @@ def process_odoo(
 
             category_missing += 1
 
-        # --------------------------------------------------
-        # RECHERCHE ODOO
-        # --------------------------------------------------
-
-        if normalized_reference in reference_index:
-
-            target_row = reference_index[
-                normalized_reference
-            ]
-
-            updated += 1
-
-        else:
-
-            target_row = next_row
-
-            # ----------------------------------------------
-            # Copie du style de la ligne précédente
-            # ----------------------------------------------
-
-            if template_row is not None:
-
-                copy_odoo_row_style(
-                    ws=ws,
-                    source_row=template_row,
-                    target_row=target_row,
-                    max_col=ws.max_column,
-                )
-
-            # ----------------------------------------------
-            # Ajout dans l'index
-            # ----------------------------------------------
-
-            reference_index[
-                normalized_reference
-            ] = target_row
-
-            # ----------------------------------------------
-            # Ligne suivante
-            # ----------------------------------------------
-
-            next_row += 1
-
-            template_row = target_row
-
-            created += 1
-
-        # --------------------------------------------------
+        # ==================================================
         # ECRITURE
-        # --------------------------------------------------
+        # ==================================================
 
-        write_odoo_row(
-            ws=ws,
+        ws.cell(
             row=target_row,
-            columns=columns,
-            reference=reference,
-            status=status,
-            price=price,
-            category_id=category_id,
+            column=col_ref,
+        ).value = reference
+
+        ws.cell(
+            row=target_row,
+            column=col_status,
+        ).value = status
+
+        ws.cell(
+            row=target_row,
+            column=col_price,
+        ).value = price
+
+        ws.cell(
+            row=target_row,
+            column=col_barcode,
+        ).value = (
+            f"I {reference}"
         )
 
-        # --------------------------------------------------
+        ws.cell(
+            row=target_row,
+            column=col_supplier,
+        ).value = (
+            "HEIDENHAIN FRANCE"
+        )
+
+        ws.cell(
+            row=target_row,
+            column=col_purchase,
+        ).value = "VRAI"
+
+        ws.cell(
+            row=target_row,
+            column=col_sale,
+        ).value = "VRAI"
+
+        ws.cell(
+            row=target_row,
+            column=col_type,
+        ).value = "Consommable"
+
+        ws.cell(
+            row=target_row,
+            column=col_invoice,
+        ).value = (
+            "Quantités livrées"
+        )
+
+        if category_id is not None:
+
+            ws.cell(
+                row=target_row,
+                column=col_category,
+            ).value = category_id
+
+        # ==================================================
         # PROGRESSION
-        # --------------------------------------------------
+        # ==================================================
 
         if (
-            index % 1000 == 0
-            or index == total_h_rows
+            index % 500 == 0
+            or index == total_h_rows - 1
         ):
 
-            pct = 30 + int(
+            pct = 45 + int(
                 (
-                    index
+                    (index + 1)
                     / max(
                         1,
                         total_h_rows,
                     )
                 )
-                * 60
+                * 45
             )
 
             progress.progress(
-                min(pct, 90),
+                min(
+                    pct,
+                    90,
+                ),
                 text=(
                     f"Odoo : "
-                    f"{index:,} / "
+                    f"{index + 1:,} / "
                     f"{total_h_rows:,} "
                     f"| Mise à jour : "
                     f"{updated:,} "
                     f"| Création : "
-                    f"{created:,}"
+                    f"{created:,} "
+                    f"| Catégories OK : "
+                    f"{category_found:,}"
                 ),
             )
 
     # ======================================================
-    # 12. SAUVEGARDE
+    # 10. SAUVEGARDE
     # ======================================================
 
     progress.progress(
-        95,
-        text="Sauvegarde du fichier Odoo...",
+        92,
+        text="Création du fichier Excel...",
     )
 
     output = BytesIO()
@@ -1722,7 +1332,7 @@ def process_odoo(
     result = output.getvalue()
 
     # ======================================================
-    # 13. FERMETURE
+    # FERMETURE
     # ======================================================
 
     wb_o.close()
@@ -1730,55 +1340,36 @@ def process_odoo(
 
     progress.progress(
         100,
-        text="✅ Préparation Odoo terminée",
+        text="✅ Étape 2 terminée",
     )
 
     # ======================================================
-    # 14. STATISTIQUES
+    # STATISTIQUES
     # ======================================================
 
     stats = {
-
-        "processed":
-            references_processed,
-
-        "updated":
-            updated,
-
-        "created":
-            created,
-
-        "category_found":
-            category_found,
-
-        "category_missing":
-            category_missing,
-
-        "sav_count":
-            sav_count,
-
-        "normal_count":
-            normal_count,
-
-        "empty_reference":
-            empty_reference_count,
-
-        "category_index_size":
-            len(category_mapping),
-
-        "odoo_index_size":
-            len(reference_index),
+        "processed": references_processed,
+        "updated": updated,
+        "created": created,
+        "category_found": category_found,
+        "category_missing": category_missing,
+        "empty_references": empty_references,
+        "category_rows": category_rows,
+        "odoo_indexed": len(
+            reference_index
+        ),
     }
 
     return result, stats
-
 
 
 # ==========================================================
 # SIDEBAR
 # ==========================================================
 
-st.sidebar.header("⚙️ Paramètres")
+st.sidebar.header(
+    "⚙️ Paramètres"
+)
 
 
 # ==========================================================
@@ -1945,7 +1536,10 @@ with col1:
 
     heidenhain_file = st.file_uploader(
         "Fichier Prix Heidenhain",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="heidenhain_file",
     )
 
@@ -1958,7 +1552,10 @@ with col2:
 
     odoo_file = st.file_uploader(
         "Fichier d'import Odoo",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="odoo_file",
     )
 
@@ -1971,7 +1568,10 @@ with col3:
 
     category_file = st.file_uploader(
         "Fichier Catégorie de produit",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="category_file",
     )
 
@@ -2009,39 +1609,52 @@ Le traitement va :
 - créer un nouveau fichier Excel propre.
         """
     )
+
     if st.button(
-            "🚀 Créer le fichier Heidenhain",
-            type="primary",
-            use_container_width=True,
-            key="create_heidenhain",
-        ):
-    
-            try:
-    
-                result, stats = process_heidenhain(
+        "🚀 Créer le fichier Heidenhain",
+        type="primary",
+        use_container_width=True,
+        key="create_heidenhain",
+    ):
+
+        try:
+
+            result, stats = (
+                process_heidenhain(
                     uploaded_file=heidenhain_file,
                     sheet_name=heidenhain_sheet,
                     header_row=heidenhain_header_row,
-                    data_start_row=heidenhain_header_row + 1,
+                    data_start_row=(
+                        heidenhain_header_row
+                        + 1
+                    ),
                     status_column=status_column,
                     id_column=id_column,
-                    output_columns=DEFAULT_OUTPUT_COLUMNS,
+                    output_columns=(
+                        DEFAULT_OUTPUT_COLUMNS
+                    ),
                 )
-    
-                st.session_state.heidenhain_result = result
-                st.session_state.heidenhain_stats = stats
-    
-                st.success(
-                    "✅ Fichier Heidenhain créé."
-                )
-    
-            except Exception as e:
-    
-                st.error(
-                    f"❌ Erreur : {e}"
-                )
-    
-                st.exception(e)
+            )
+
+            st.session_state.heidenhain_result = (
+                result
+            )
+
+            st.session_state.heidenhain_stats = (
+                stats
+            )
+
+            st.success(
+                "✅ Fichier Heidenhain créé."
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Erreur : {e}"
+            )
+
+            st.exception(e)
 
 
 # ==========================================================
@@ -2050,17 +1663,24 @@ Le traitement va :
 
 if st.session_state.heidenhain_result:
 
-    stats = st.session_state.heidenhain_stats
+    stats = (
+        st.session_state.heidenhain_stats
+    )
 
     st.success(
         f"Fichier créé : "
-        f"{stats['created']:,} nouvelles lignes SAV."
+        f"{stats['created']:,} "
+        f"nouvelles lignes SAV."
     )
 
     st.download_button(
         "⬇️ Télécharger le fichier Heidenhain",
-        data=st.session_state.heidenhain_result,
-        file_name="Prix_Heidenhain_prepare.xlsx",
+        data=(
+            st.session_state.heidenhain_result
+        ),
+        file_name=(
+            "Prix_Heidenhain_prepare.xlsx"
+        ),
         mime=(
             "application/vnd.openxmlformats-"
             "officedocument.spreadsheetml.sheet"
@@ -2095,22 +1715,17 @@ else:
 
     st.markdown(
         """
-        Le traitement va parcourir le fichier Heidenhain
-        et mettre à jour ou créer les références dans Odoo.
+Le traitement va parcourir le fichier Heidenhain
+et mettre à jour ou créer les références dans Odoo.
 
-        **Règles appliquées :**
+**Optimisation active :**
 
-        - Référence existante → mise à jour.
-        - Référence absente → création d'une nouvelle ligne.
-        - Prix normal → **Prix (PPC)**.
-        - Référence `_SAV` → **Prix (SAV)**.
-        - Code-barres → `I ` + référence.
-        - Fournisseur → `HEIDENHAIN FRANCE`.
-        - Peut être acheté → `VRAI`.
-        - Peut être vendu → `VRAI`.
-        - Type de produit → `Consommable`.
-        - Politique de facturation → `Quantités livrées`.
-        - Catégorie → recherche dans le fichier Catégorie de produit.
+- le fichier Catégorie est chargé **une seule fois** ;
+- les catégories sont conservées en mémoire ;
+- le fichier Odoo est indexé une seule fois ;
+- les recherches de références utilisent un dictionnaire ;
+- les valeurs Heidenhain sont parcourues avec `iter_rows()` ;
+- aucune ouverture du fichier catégorie n'est effectuée pendant les 25 000 lignes.
         """
     )
 
@@ -2124,15 +1739,24 @@ else:
         try:
 
             result, stats = process_odoo(
+
                 heidenhain_file=heidenhain_file,
+
                 odoo_file=odoo_file,
+
                 category_file=category_file,
 
-                heidenhain_sheet=heidenhain_sheet,
+                heidenhain_sheet=(
+                    heidenhain_sheet
+                ),
 
-                odoo_sheet=odoo_sheet,
+                odoo_sheet=(
+                    odoo_sheet
+                ),
 
-                category_sheet=category_sheet,
+                category_sheet=(
+                    category_sheet
+                ),
 
                 heidenhain_header_row=int(
                     heidenhain_header_row
@@ -2150,39 +1774,74 @@ else:
                     category_search_col
                 ),
 
-                heidenhain_id_column=id_column,
+                heidenhain_id_column=(
+                    id_column
+                ),
 
-                heidenhain_status_column=status_column,
+                heidenhain_status_column=(
+                    status_column
+                ),
 
-                heidenhain_group_column=group_column,
+                heidenhain_group_column=(
+                    group_column
+                ),
 
-                heidenhain_ppc_column=ppc_column,
+                heidenhain_ppc_column=(
+                    ppc_column
+                ),
 
-                heidenhain_sav_column=sav_column,
+                heidenhain_sav_column=(
+                    sav_column
+                ),
 
-                odoo_reference_column=odoo_reference,
+                odoo_reference_column=(
+                    odoo_reference
+                ),
 
-                odoo_sales_status_column=odoo_sales_status,
+                odoo_sales_status_column=(
+                    odoo_sales_status
+                ),
 
-                odoo_price_column=odoo_price,
+                odoo_price_column=(
+                    odoo_price
+                ),
 
-                odoo_barcode_column=odoo_barcode,
+                odoo_barcode_column=(
+                    odoo_barcode
+                ),
 
-                odoo_supplier_column=odoo_supplier,
+                odoo_supplier_column=(
+                    odoo_supplier
+                ),
 
-                odoo_purchase_column=odoo_purchase,
+                odoo_purchase_column=(
+                    odoo_purchase
+                ),
 
-                odoo_sale_column=odoo_sale,
+                odoo_sale_column=(
+                    odoo_sale
+                ),
 
-                odoo_type_column=odoo_type,
+                odoo_type_column=(
+                    odoo_type
+                ),
 
-                odoo_invoice_policy_column=odoo_invoice_policy,
+                odoo_invoice_policy_column=(
+                    odoo_invoice_policy
+                ),
 
-                odoo_category_column=odoo_category,
+                odoo_category_column=(
+                    odoo_category
+                ),
             )
 
-            st.session_state.odoo_result = result
-            st.session_state.odoo_stats = stats
+            st.session_state.odoo_result = (
+                result
+            )
+
+            st.session_state.odoo_stats = (
+                stats
+            )
 
             st.success(
                 "✅ Fichier Odoo préparé avec succès."
@@ -2203,7 +1862,9 @@ else:
 
 if st.session_state.odoo_result:
 
-    stats = st.session_state.odoo_stats
+    stats = (
+        st.session_state.odoo_stats
+    )
 
     st.divider()
 
@@ -2211,33 +1872,40 @@ if st.session_state.odoo_result:
         "📊 Résultat Odoo"
     )
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5 = (
+        st.columns(5)
+    )
 
     with c1:
+
         st.metric(
             "Références traitées",
             f"{stats['processed']:,}",
         )
 
     with c2:
+
         st.metric(
             "Lignes mises à jour",
             f"{stats['updated']:,}",
         )
 
     with c3:
+
         st.metric(
             "Nouvelles lignes",
             f"{stats['created']:,}",
         )
 
     with c4:
+
         st.metric(
             "Catégories trouvées",
             f"{stats['category_found']:,}",
         )
 
     with c5:
+
         st.metric(
             "Catégories introuvables",
             f"{stats['category_missing']:,}",
@@ -2250,10 +1918,34 @@ if st.session_state.odoo_result:
             "référence(s) n'ont pas trouvé de catégorie."
         )
 
+    if stats["empty_references"] > 0:
+
+        st.warning(
+            f"⚠️ {stats['empty_references']:,} "
+            "ligne(s) Heidenhain sans référence."
+        )
+
+    st.info(
+        f"📂 {stats['category_rows']:,} lignes "
+        "de catégories chargées une seule fois."
+    )
+
+    st.info(
+        f"🔎 {stats['odoo_indexed']:,} références "
+        "Odoo indexées."
+    )
+
     st.download_button(
-        label="⬇️ Télécharger le fichier Odoo prêt à importer",
-        data=st.session_state.odoo_result,
-        file_name="Import_Odoo_Heidenhain_prepare.xlsx",
+        label=(
+            "⬇️ Télécharger le fichier Odoo "
+            "prêt à importer"
+        ),
+        data=(
+            st.session_state.odoo_result
+        ),
+        file_name=(
+            "Import_Odoo_Heidenhain_prepare.xlsx"
+        ),
         mime=(
             "application/vnd.openxmlformats-"
             "officedocument.spreadsheetml.sheet"
@@ -2272,3 +1964,4 @@ st.divider()
 st.success(
     "🎯 Le fichier Odoo final peut maintenant être téléchargé."
 )
+
