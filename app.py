@@ -15,7 +15,8 @@ from zoneinfo import ZoneInfo  # gestion fuseaux horaires standard
 import matplotlib.dates as mdates
 import json
 import uuid
-from posthog import Posthog
+
+
 
 
 # ==========================================================
@@ -193,28 +194,7 @@ LongBase = 0
 st.set_page_config(page_title="Battery Sizer By JMN", layout="wide")
 st.title("Battery Sizer - For Switzerland - By JMN")
 
-# ==========================================================
-# TRACA
-# ==========================================================
 
-posthog = Posthog(
-    project_api_key=st.secrets["POSTHOG_API_KEY"],
-    host="https://us.i.posthog.com"
-)
-
-if "user_id" not in st.session_state:
-    st.session_state.user_id = str(uuid.uuid4())
-
-def track_event(event_name, properties=None):
-    try:
-        posthog.capture(
-            distinct_id=st.session_state.user_id,
-            event=event_name,
-            properties=properties or {}
-        )
-        posthog.flush()
-    except Exception as e:
-        st.warning(f"Erreur PostHog : {e}")
     
 # ==========================================================
 # IMPORT / EXPORT CONFIG
