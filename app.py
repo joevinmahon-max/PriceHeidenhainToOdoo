@@ -77,7 +77,7 @@ HEIDENHAIN_AVAILABLE_COLUMNS = [
     "Prix (SAV) 2027",
     "Augmentation",
     "COEF2",
-    "Prix HA €",
+    "Prix HA",
 ]
 
 DEFAULT_OUTPUT_COLUMNS = [
@@ -88,7 +88,7 @@ DEFAULT_OUTPUT_COLUMNS = [
     "Groupe Produit",
     "Prix (PPC)",
     "Prix (SAV)",
-    "Prix HA €",
+    "Prix HA",
 ]
 
 
@@ -1928,7 +1928,7 @@ sav_column = st.sidebar.text_input(
 
 heidenhain_prixHA = st.sidebar.text_input(
     "Colonne Prix HA",
-    "Prix HA €",
+    "Prix HA",
 )
 
 
