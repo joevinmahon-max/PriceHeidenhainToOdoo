@@ -24,6 +24,16 @@ st.set_page_config(
 
 st.title("📦 Préparation du fichier Prix HEIDENHAIN")
 
+# ==========================================================
+# SESSION STATE
+# ==========================================================
+
+if "result_bytes" not in st.session_state:
+    st.session_state.result_bytes = None
+
+if "result_stats" not in st.session_state:
+    st.session_state.result_stats = None
+
 
 # ==========================================================
 # CONSTANTES
@@ -1347,22 +1357,20 @@ else:
     ):
 
         try:
-
-            result_bytes, stats = (
-                process_heidenhain(
+                result_bytes, stats = process_heidenhain(
                     uploaded_file=heidenhain_file,
                     sheet_name=heidenhain_sheet,
-                    header_row=int(
-                        heidenhain_header_row
-                    ),
-                    data_start_row=int(
-                        heidenhain_data_start_row
-                    ),
+                    header_row=int(heidenhain_header_row),
+                    data_start_row=int(heidenhain_data_start_row),
                     status_column=status_column,
                     id_column=id_column,
-                    OUTPUT_COLUMNS=OUTPUT_COLUMNS,
+                    output_columns=OUTPUT_COLUMNS,
                 )
-            )
+                
+                # Conserver le résultat après le rerun Streamlit
+                st.session_state.result_bytes = result_bytes
+                st.session_state.result_stats = stats
+
 
             st.success(
                 "✅ Fichier Heidenhain préparé avec succès."
