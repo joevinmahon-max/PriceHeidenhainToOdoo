@@ -189,16 +189,27 @@ def get_excel_sheet_names(uploaded_file):
     """
     Retourne les noms des feuilles du fichier Excel.
     """
-
+    
     uploaded_file.seek(0)
-
+    
+    # Classeur avec les formules
     workbook = openpyxl.load_workbook(
         uploaded_file,
-        read_only=True,
         data_only=False,
     )
+    
+    # Classeur avec les valeurs calculées par Excel
+    uploaded_file.seek(0)
+    
+    workbook_values = openpyxl.load_workbook(
+        uploaded_file,
+        data_only=True,
+    )
+
 
     sheet_names = workbook.sheetnames
+    values_ws = workbook_values[sheet_name]
+
 
     workbook.close()
 
@@ -311,13 +322,15 @@ def copy_cell_style(
 
 def copy_selected_row(
     source_ws,
+    values_ws,
     target_ws,
     source_row,
     target_row,
     source_columns,
-    output_columns,
+    OUTPUT_COLUMNS,
     new_id=None,
 ):
+
     """
     Copie uniquement les colonnes demandées
     d'une ligne source vers une ligne destination.
@@ -345,7 +358,16 @@ def copy_selected_row(
             column=output_col_index,
         )
 
-        target_cell.value = source_cell.value
+        # Pour Prix (SAV), on prend la valeur calculée
+        # par Excel et non la formule.
+        if column_name == "Prix (SAV)":
+            target_cell.value = values_ws.cell(
+                row=source_row,
+                column=source_col_index,
+            ).value
+        else:
+            target_cell.value = source_cell.value
+
 
         copy_cell_style(
             source_cell,
