@@ -2079,17 +2079,22 @@ else:
 
     st.markdown(
         """
-Le traitement va parcourir le fichier Heidenhain
-et mettre à jour ou créer les références dans Odoo.
+        Le traitement va parcourir le fichier Heidenhain
+        et mettre à jour ou créer les références dans Odoo.
 
-**Optimisation active :**
+        **Règles appliquées :**
 
-- le fichier Catégorie est chargé **une seule fois** ;
-- les catégories sont conservées en mémoire ;
-- le fichier Odoo est indexé une seule fois ;
-- les recherches de références utilisent un dictionnaire ;
-- les valeurs Heidenhain sont parcourues avec `iter_rows()` ;
-- aucune ouverture du fichier catégorie n'est effectuée pendant les 25 000 lignes.
+        - Référence existante → mise à jour.
+        - Référence absente → création d'une nouvelle ligne.
+        - Prix normal → **Prix (PPC)**.
+        - Référence `_SAV` → **Prix (SAV)**.
+        - Code-barres → `I ` + référence.
+        - Fournisseur → `HEIDENHAIN FRANCE`.
+        - Peut être acheté → `VRAI`.
+        - Peut être vendu → `VRAI`.
+        - Type de produit → `Consommable`.
+        - Politique de facturation → `Quantités livrées`.
+        - Catégorie → recherche dans le fichier Catégorie de produit.
         """
     )
 
