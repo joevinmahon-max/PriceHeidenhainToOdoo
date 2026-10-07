@@ -1587,9 +1587,30 @@ st.header(
     "1️⃣ Création du fichier Heidenhain"
 )
 
-if heidenhain_file is not None:
+if heidenhain_file is None:
 
-    if st.button(
+    st.info(
+        "👆 Importez le fichier Heidenhain "
+        "pour commencer."
+    )
+
+else:
+
+    st.markdown(
+        """
+Le traitement va :
+
+- conserver toutes les lignes du fichier ;
+- conserver uniquement les colonnes sélectionnées ;
+- récupérer la **valeur calculée** de `Prix (SAV)` ;
+- rechercher les statuts **VG** et **PG** ;
+- créer les `ID_SAV` ;
+- ignorer les `ID_SAV` déjà existants ;
+- ajouter les nouvelles lignes SAV à la fin ;
+- créer un nouveau fichier Excel propre.
+        """
+    )
+if st.button(
         "🚀 Créer le fichier Heidenhain",
         type="primary",
         use_container_width=True,
