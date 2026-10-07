@@ -1610,39 +1610,39 @@ Le traitement va :
 - créer un nouveau fichier Excel propre.
         """
     )
-if st.button(
-        "🚀 Créer le fichier Heidenhain",
-        type="primary",
-        use_container_width=True,
-        key="create_heidenhain",
-    ):
-
-        try:
-
-            result, stats = process_heidenhain(
-                uploaded_file=heidenhain_file,
-                sheet_name=heidenhain_sheet,
-                header_row=heidenhain_header_row,
-                data_start_row=heidenhain_header_row + 1,
-                status_column=status_column,
-                id_column=id_column,
-                output_columns=DEFAULT_OUTPUT_COLUMNS,
-            )
-
-            st.session_state.heidenhain_result = result
-            st.session_state.heidenhain_stats = stats
-
-            st.success(
-                "✅ Fichier Heidenhain créé."
-            )
-
-        except Exception as e:
-
-            st.error(
-                f"❌ Erreur : {e}"
-            )
-
-            st.exception(e)
+    if st.button(
+            "🚀 Créer le fichier Heidenhain",
+            type="primary",
+            use_container_width=True,
+            key="create_heidenhain",
+        ):
+    
+            try:
+    
+                result, stats = process_heidenhain(
+                    uploaded_file=heidenhain_file,
+                    sheet_name=heidenhain_sheet,
+                    header_row=heidenhain_header_row,
+                    data_start_row=heidenhain_header_row + 1,
+                    status_column=status_column,
+                    id_column=id_column,
+                    output_columns=DEFAULT_OUTPUT_COLUMNS,
+                )
+    
+                st.session_state.heidenhain_result = result
+                st.session_state.heidenhain_stats = stats
+    
+                st.success(
+                    "✅ Fichier Heidenhain créé."
+                )
+    
+            except Exception as e:
+    
+                st.error(
+                    f"❌ Erreur : {e}"
+                )
+    
+                st.exception(e)
 
 
 # ==========================================================
