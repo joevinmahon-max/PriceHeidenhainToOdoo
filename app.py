@@ -2,19 +2,22 @@
 # PREPARATION DES PRIX HEIDENHAIN
 # JMA
 #
-# ETAPE 1 :
-# - Fichier 1 = Prix Heidenhain
+# FONCTIONNEMENT
+# ----------------------------------------------------------
+# - Fichier Heidenhain configurable
 # - Feuille configurable
-# - En-têtes sur ligne configurable
-# - Données à partir d'une ligne configurable
+# - Ligne d'en-têtes configurable
+# - Première ligne de données configurable
+# - Conservation uniquement des colonnes demandées
 # - Recherche des statuts VG / PG
 # - Création des ID_SAV
 # - Vérification des doublons
-# - Création d'un nouveau fichier avec uniquement
-#   les colonnes configurées
-#
-# ETAPE 2 ODOO :
-# Prévue pour plus tard
+# - Ajout des lignes SAV à la fin
+# - Pour "Prix (SAV)" :
+#       récupération de la VALEUR CALCULEE
+#       et non de la formule
+# - Aucun aperçu du fichier
+# - Résultat conservé après téléchargement
 # ==========================================================
 
 import streamlit as st
@@ -57,7 +60,10 @@ if "result_file_name" not in st.session_state:
 # CONSTANTES
 # ==========================================================
 
-STATUS_TO_DUPLICATE = {"VG", "PG"}
+STATUS_TO_DUPLICATE = {
+    "VG",
+    "PG",
+}
 
 DEFAULT_OUTPUT_COLUMNS = [
     "ID",
@@ -71,22 +77,23 @@ DEFAULT_OUTPUT_COLUMNS = [
 
 
 # ==========================================================
-# PARAMETRES
+# PARAMETRES SIDEBAR
 # ==========================================================
 
 st.sidebar.header("⚙️ Paramètres")
 
 
 # ==========================================================
-# FICHIER 1 — HEIDENHAIN
+# FICHIER HEIDENHAIN
 # ==========================================================
 
-st.sidebar.subheader("📘 Fichier 1 — Prix Heidenhain")
+st.sidebar.subheader(
+    "📘 Fichier Prix Heidenhain"
+)
 
 heidenhain_sheet = st.sidebar.text_input(
     "Feuille Heidenhain",
     value="Distributeurs",
-    help="Nom exact de la feuille à traiter.",
 )
 
 heidenhain_header_row = st.sidebar.number_input(
@@ -94,7 +101,6 @@ heidenhain_header_row = st.sidebar.number_input(
     min_value=1,
     value=4,
     step=1,
-    help="Les noms des colonnes se trouvent sur cette ligne.",
 )
 
 heidenhain_data_start_row = st.sidebar.number_input(
@@ -102,19 +108,16 @@ heidenhain_data_start_row = st.sidebar.number_input(
     min_value=1,
     value=5,
     step=1,
-    help="Les données commencent à cette ligne.",
 )
 
 status_column = st.sidebar.text_input(
     "Colonne Statut",
     value="Statut",
-    help="Nom exact de la colonne contenant VG / PG.",
 )
 
 id_column = st.sidebar.text_input(
     "Colonne ID",
     value="ID",
-    help="Nom exact de la colonne contenant l'identifiant.",
 )
 
 
@@ -124,16 +127,16 @@ id_column = st.sidebar.text_input(
 
 st.sidebar.divider()
 
-st.sidebar.subheader("📋 Colonnes à conserver")
+st.sidebar.subheader(
+    "📋 Colonnes à conserver"
+)
 
 output_columns_text = st.sidebar.text_area(
-    "Liste des colonnes",
-    value="\n".join(DEFAULT_OUTPUT_COLUMNS),
-    height=180,
-    help=(
-        "Une colonne par ligne. "
-        "L'ordre sera conservé dans le fichier résultant."
+    "Une colonne par ligne",
+    value="\n".join(
+        DEFAULT_OUTPUT_COLUMNS
     ),
+    height=180,
 )
 
 OUTPUT_COLUMNS = [
@@ -144,35 +147,28 @@ OUTPUT_COLUMNS = [
 
 
 # ==========================================================
-# FICHIER 2 — ODOO
+# FICHIER ODOO
 # ==========================================================
 
 st.sidebar.divider()
 
-st.sidebar.subheader("📗 Fichier 2 — Import Odoo")
+st.sidebar.subheader(
+    "📗 Fichier Odoo"
+)
 
 odoo_sheet = st.sidebar.text_input(
     "Feuille Odoo",
     value="Sheet1",
-    help=(
-        "Nom de la feuille du fichier d'import Odoo. "
-        "Le traitement Odoo sera ajouté ultérieurement."
-    ),
 )
 
 
 # ==========================================================
-# UTILITAIRES
+# UTILITAIRE : NORMALISATION
 # ==========================================================
 
 def normalize_value(value):
     """
     Normalise une valeur pour les comparaisons.
-
-    Exemple :
-        ' vg ' -> 'VG'
-        'abc123' -> 'ABC123'
-        None -> ''
     """
 
     if value is None:
@@ -182,57 +178,29 @@ def normalize_value(value):
 
 
 # ==========================================================
-# LECTURE DES FEUILLES
+# UTILITAIRE : NOMS DES FEUILLES
 # ==========================================================
 
 def get_excel_sheet_names(uploaded_file):
     """
-    Retourne les noms des feuilles du fichier Excel.
+    Retourne uniquement les noms des feuilles.
+
+    IMPORTANT :
+    Cette fonction ne dépend d'aucune variable externe
+    comme sheet_name.
     """
-    
+
     uploaded_file.seek(0)
-    
-    # Classeur principal : formules + styles
+
     workbook = openpyxl.load_workbook(
         uploaded_file,
+        read_only=True,
         data_only=False,
     )
-    
-    if sheet_name not in workbook.sheetnames:
-        available = ", ".join(workbook.sheetnames)
-        workbook.close()
-    
-        raise ValueError(
-            f"La feuille '{sheet_name}' n'existe pas.\n\n"
-            f"Feuilles disponibles : {available}"
-        )
-    
-    source_ws = workbook[sheet_name]
-    
-    # Deuxième ouverture : valeurs calculées par Excel
-    uploaded_file.seek(0)
-    
-    workbook_values = openpyxl.load_workbook(
-        uploaded_file,
-        data_only=True,
+
+    sheet_names = list(
+        workbook.sheetnames
     )
-    
-    if sheet_name not in workbook_values.sheetnames:
-        workbook.close()
-        workbook_values.close()
-    
-        raise ValueError(
-            f"La feuille '{sheet_name}' n'existe pas dans "
-            "le fichier des valeurs."
-        )
-    
-    values_ws = workbook_values[sheet_name]
-
-
-
-    sheet_names = workbook.sheetnames
-    values_ws = workbook_values[sheet_name]
-
 
     workbook.close()
 
@@ -240,7 +208,7 @@ def get_excel_sheet_names(uploaded_file):
 
 
 # ==========================================================
-# RECHERCHE DES COLONNES
+# UTILITAIRE : RECHERCHE DES COLONNES
 # ==========================================================
 
 def find_columns_by_headers(
@@ -249,18 +217,8 @@ def find_columns_by_headers(
     requested_columns,
 ):
     """
-    Recherche les colonnes demandées sur une ligne donnée.
-
-    Retourne :
-
-        {
-            "ID": 3,
-            "Description": 4,
-            ...
-        }
-
-    Les numéros de colonnes retournés sont ceux d'Excel
-    et commencent donc à 1.
+    Recherche les colonnes demandées
+    sur la ligne d'en-têtes.
     """
 
     requested_normalized = {
@@ -278,19 +236,23 @@ def find_columns_by_headers(
 
         if normalized in requested_normalized:
 
-            original_name = requested_normalized[
-                normalized
-            ]
+            original_name = (
+                requested_normalized[
+                    normalized
+                ]
+            )
 
             if original_name not in found:
 
-                found[original_name] = cell.column
+                found[
+                    original_name
+                ] = cell.column
 
     return found
 
 
 # ==========================================================
-# COPIE DU STYLE
+# UTILITAIRE : COPIE DU STYLE
 # ==========================================================
 
 def copy_cell_style(
@@ -298,8 +260,7 @@ def copy_cell_style(
     target_cell,
 ):
     """
-    Copie le style de la cellule source
-    vers la cellule destination.
+    Copie le style Excel de la cellule source.
     """
 
     if source_cell.has_style:
@@ -340,7 +301,7 @@ def copy_cell_style(
 
 
 # ==========================================================
-# COPIE D'UNE LIGNE
+# UTILITAIRE : COPIE D'UNE LIGNE
 # ==========================================================
 
 def copy_selected_row(
@@ -350,16 +311,16 @@ def copy_selected_row(
     source_row,
     target_row,
     source_columns,
-    OUTPUT_COLUMNS,
+    output_columns,
     new_id=None,
 ):
-
     """
-    Copie uniquement les colonnes demandées
-    d'une ligne source vers une ligne destination.
+    Copie une ligne dans le nouveau fichier.
 
-    Si new_id est fourni, l'ID de la nouvelle ligne
-    est remplacé par new_id.
+    Pour "Prix (SAV)", on prend la valeur calculée
+    présente dans le classeur ouvert avec data_only=True.
+
+    Pour les autres colonnes, on prend la valeur normale.
     """
 
     for output_col_index, column_name in enumerate(
@@ -367,9 +328,11 @@ def copy_selected_row(
         start=1,
     ):
 
-        source_col_index = source_columns[
-            column_name
-        ]
+        source_col_index = (
+            source_columns[
+                column_name
+            ]
+        )
 
         source_cell = source_ws.cell(
             row=source_row,
@@ -381,25 +344,41 @@ def copy_selected_row(
             column=output_col_index,
         )
 
-        # Pour Prix (SAV), on prend la valeur calculée
-        # par Excel et non la formule.
-        if column_name == "Prix (SAV)":
-            target_cell.value = values_ws.cell(
-                row=source_row,
-                column=source_col_index,
-            ).value
-        else:
-            target_cell.value = source_cell.value
+        # ==================================================
+        # PRIX SAV
+        # ==================================================
 
+        if column_name == "Prix (SAV)":
+
+            calculated_value = (
+                values_ws.cell(
+                    row=source_row,
+                    column=source_col_index,
+                ).value
+            )
+
+            target_cell.value = (
+                calculated_value
+            )
+
+        else:
+
+            target_cell.value = (
+                source_cell.value
+            )
+
+        # ==================================================
+        # STYLE
+        # ==================================================
 
         copy_cell_style(
             source_cell,
             target_cell,
         )
 
-    # ------------------------------------------------------
-    # Remplacement de l'ID
-    # ------------------------------------------------------
+    # ======================================================
+    # REMPLACEMENT DE L'ID
+    # ======================================================
 
     if new_id is not None:
 
@@ -411,7 +390,8 @@ def copy_selected_row(
             )
 
         id_output_column = (
-            output_columns.index("ID") + 1
+            output_columns.index("ID")
+            + 1
         )
 
         target_ws.cell(
@@ -434,26 +414,16 @@ def process_heidenhain(
     output_columns,
 ):
     """
-    Traite le fichier Heidenhain.
-
-    Fonctionnement :
-
-    1. Ouvre la feuille demandée.
-    2. Recherche les colonnes sur header_row.
-    3. Lit toutes les lignes à partir de data_start_row.
-    4. Conserve toutes les lignes existantes.
-    5. Recherche les statuts VG / PG.
-    6. Pour chaque VG / PG :
-       - récupère l'ID ;
-       - crée ID_SAV ;
-       - vérifie si ID_SAV existe déjà.
-    7. Ajoute les nouvelles lignes SAV à la fin.
-    8. Crée un nouveau fichier Excel.
-    9. Retourne le fichier + les statistiques.
+    Traite complètement le fichier Heidenhain.
     """
 
-    header_row = int(header_row)
-    data_start_row = int(data_start_row)
+    header_row = int(
+        header_row
+    )
+
+    data_start_row = int(
+        data_start_row
+    )
 
     # ======================================================
     # VALIDATIONS
@@ -463,13 +433,13 @@ def process_heidenhain(
 
         raise ValueError(
             "La première ligne de données doit être "
-            "supérieure à la ligne des noms de colonnes."
+            "supérieure à la ligne des en-têtes."
         )
 
     if not output_columns:
 
         raise ValueError(
-            "Aucune colonne à conserver n'a été définie."
+            "Aucune colonne à conserver."
         )
 
     if "ID" not in output_columns:
@@ -494,7 +464,7 @@ def process_heidenhain(
         )
 
     # ======================================================
-    # OUVERTURE DU FICHIER SOURCE
+    # OUVERTURE DU FICHIER AVEC FORMULES
     # ======================================================
 
     uploaded_file.seek(0)
@@ -506,20 +476,53 @@ def process_heidenhain(
 
     if sheet_name not in workbook.sheetnames:
 
-        available_sheets = ", ".join(
+        available = ", ".join(
             workbook.sheetnames
         )
 
         workbook.close()
 
         raise ValueError(
-            f"La feuille '{sheet_name}' n'existe pas.\n\n"
-            f"Feuilles disponibles : {available_sheets}"
+            f"La feuille '{sheet_name}' "
+            f"n'existe pas.\n\n"
+            f"Feuilles disponibles : {available}"
         )
 
     source_ws = workbook[
         sheet_name
     ]
+
+    # ======================================================
+    # OUVERTURE DU MEME FICHIER AVEC VALEURS CALCULEES
+    # ======================================================
+
+    uploaded_file.seek(0)
+
+    workbook_values = (
+        openpyxl.load_workbook(
+            uploaded_file,
+            data_only=True,
+        )
+    )
+
+    if sheet_name not in (
+        workbook_values.sheetnames
+    ):
+
+        workbook.close()
+        workbook_values.close()
+
+        raise ValueError(
+            f"La feuille '{sheet_name}' "
+            "n'existe pas dans le fichier "
+            "des valeurs calculées."
+        )
+
+    values_ws = (
+        workbook_values[
+            sheet_name
+        ]
+    )
 
     # ======================================================
     # RECHERCHE DES COLONNES
@@ -535,10 +538,12 @@ def process_heidenhain(
         )
     )
 
-    source_columns = find_columns_by_headers(
-        source_ws,
-        header_row,
-        required_columns,
+    source_columns = (
+        find_columns_by_headers(
+            source_ws,
+            header_row,
+            required_columns,
+        )
     )
 
     missing_columns = [
@@ -550,23 +555,30 @@ def process_heidenhain(
     if missing_columns:
 
         workbook.close()
+        workbook_values.close()
 
         raise ValueError(
             "Colonnes introuvables sur la ligne "
             f"{header_row} : "
-            + ", ".join(missing_columns)
+            + ", ".join(
+                missing_columns
+            )
         )
 
-    status_col = source_columns[
-        status_column
-    ]
+    status_col = (
+        source_columns[
+            status_column
+        ]
+    )
 
-    id_col = source_columns[
-        id_column
-    ]
+    id_col = (
+        source_columns[
+            id_column
+        ]
+    )
 
     # ======================================================
-    # NOMBRE TOTAL DE LIGNES
+    # NOMBRE DE LIGNES
     # ======================================================
 
     max_row = source_ws.max_row
@@ -577,7 +589,7 @@ def process_heidenhain(
     )
 
     # ======================================================
-    # CREATION DU NOUVEAU CLASSEUR
+    # NOUVEAU CLASSEUR
     # ======================================================
 
     output_workbook = (
@@ -591,7 +603,7 @@ def process_heidenhain(
     output_ws.title = sheet_name
 
     # ======================================================
-    # CREATION DES EN-TETES
+    # EN-TETES
     # ======================================================
 
     for output_col_index, column_name in enumerate(
@@ -625,17 +637,17 @@ def process_heidenhain(
         )
 
     # ======================================================
-    # BARRE DE PROGRESSION
+    # PROGRESSION
     # ======================================================
 
     progress = st.progress(
         0,
-        text="Lecture du fichier Heidenhain...",
+        text="Préparation du fichier...",
     )
 
     # ======================================================
     # ETAPE 1
-    # RECUPERATION DE TOUS LES IDS EXISTANTS
+    # IDS EXISTANTS
     # ======================================================
 
     existing_ids = set()
@@ -652,8 +664,8 @@ def process_heidenhain(
             column=id_col,
         ).value
 
-        normalized_id = normalize_value(
-            value
+        normalized_id = (
+            normalize_value(value)
         )
 
         if normalized_id:
@@ -661,8 +673,6 @@ def process_heidenhain(
             existing_ids.add(
                 normalized_id
             )
-
-        # Progression tous les 5000 enregistrements.
 
         if (
             index % 5000 == 0
@@ -672,15 +682,21 @@ def process_heidenhain(
             percent = int(
                 (
                     (index + 1)
-                    / max(1, total_rows)
+                    / max(
+                        1,
+                        total_rows,
+                    )
                 )
-                * 20
+                * 15
             )
 
             progress.progress(
-                min(percent, 20),
+                min(
+                    percent,
+                    15,
+                ),
                 text=(
-                    "Recherche des IDs existants... "
+                    "Lecture des IDs... "
                     f"{index + 1:,} / "
                     f"{total_rows:,}"
                 ),
@@ -695,16 +711,10 @@ def process_heidenhain(
 
     vg_count = 0
     pg_count = 0
-
     empty_id_count = 0
     duplicate_count = 0
 
     output_data_row = 2
-
-    progress.progress(
-        20,
-        text="Copie des lignes existantes...",
-    )
 
     for index, source_row in enumerate(
         range(
@@ -713,12 +723,13 @@ def process_heidenhain(
         )
     ):
 
-        # --------------------------------------------------
+        # ==================================================
         # COPIE DE LA LIGNE ORIGINALE
-        # --------------------------------------------------
+        # ==================================================
 
         copy_selected_row(
             source_ws=source_ws,
+            values_ws=values_ws,
             target_ws=output_ws,
             source_row=source_row,
             target_row=output_data_row,
@@ -726,9 +737,9 @@ def process_heidenhain(
             output_columns=output_columns,
         )
 
-        # --------------------------------------------------
-        # HAUTEUR DE LIGNE
-        # --------------------------------------------------
+        # ==================================================
+        # HAUTEUR
+        # ==================================================
 
         output_ws.row_dimensions[
             output_data_row
@@ -738,9 +749,9 @@ def process_heidenhain(
             ].height
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # STATUT
-        # --------------------------------------------------
+        # ==================================================
 
         status = normalize_value(
             source_ws.cell(
@@ -749,41 +760,19 @@ def process_heidenhain(
             ).value
         )
 
-        # --------------------------------------------------
-        # Si le statut n'est pas VG / PG
-        # --------------------------------------------------
+        # ==================================================
+        # PAS VG / PG
+        # ==================================================
 
         if status not in STATUS_TO_DUPLICATE:
 
             output_data_row += 1
 
-            if (
-                index % 5000 == 0
-                or index == total_rows - 1
-            ):
-
-                percent = 20 + int(
-                    (
-                        (index + 1)
-                        / max(1, total_rows)
-                    )
-                    * 40
-                )
-
-                progress.progress(
-                    min(percent, 60),
-                    text=(
-                        "Traitement des lignes... "
-                        f"{index + 1:,} / "
-                        f"{total_rows:,}"
-                    ),
-                )
-
             continue
 
-        # --------------------------------------------------
-        # COMPTEUR VG / PG
-        # --------------------------------------------------
+        # ==================================================
+        # COMPTEUR
+        # ==================================================
 
         if status == "VG":
 
@@ -793,14 +782,16 @@ def process_heidenhain(
 
             pg_count += 1
 
-        # --------------------------------------------------
-        # ID SOURCE
-        # --------------------------------------------------
+        # ==================================================
+        # ID ORIGINAL
+        # ==================================================
 
-        original_id = source_ws.cell(
-            row=source_row,
-            column=id_col,
-        ).value
+        original_id = (
+            source_ws.cell(
+                row=source_row,
+                column=id_col,
+            ).value
+        )
 
         if original_id is None:
 
@@ -822,23 +813,28 @@ def process_heidenhain(
 
             continue
 
-        # --------------------------------------------------
-        # CREATION DU NOUVEL ID
-        # --------------------------------------------------
+        # ==================================================
+        # ID SAV
+        # ==================================================
 
         new_id = (
             f"{original_id}_SAV"
         )
 
         normalized_new_id = (
-            normalize_value(new_id)
+            normalize_value(
+                new_id
+            )
         )
 
-        # --------------------------------------------------
-        # VERIFICATION DU DOUBLON
-        # --------------------------------------------------
+        # ==================================================
+        # DOUBLON
+        # ==================================================
 
-        if normalized_new_id in existing_ids:
+        if (
+            normalized_new_id
+            in existing_ids
+        ):
 
             duplicate_count += 1
 
@@ -846,9 +842,9 @@ def process_heidenhain(
 
             continue
 
-        # --------------------------------------------------
-        # RESERVATION DE L'ID
-        # --------------------------------------------------
+        # ==================================================
+        # RESERVATION
+        # ==================================================
 
         existing_ids.add(
             normalized_new_id
@@ -863,53 +859,61 @@ def process_heidenhain(
 
         output_data_row += 1
 
-        # --------------------------------------------------
+        # ==================================================
         # PROGRESSION
-        # --------------------------------------------------
+        # ==================================================
 
         if (
             index % 5000 == 0
             or index == total_rows - 1
         ):
 
-            percent = 20 + int(
-                (
-                    (index + 1)
-                    / max(1, total_rows)
+            percent = (
+                15
+                + int(
+                    (
+                        (index + 1)
+                        / max(
+                            1,
+                            total_rows,
+                        )
+                    )
+                    * 45
                 )
-                * 40
             )
 
             progress.progress(
-                min(percent, 60),
+                min(
+                    percent,
+                    60,
+                ),
                 text=(
-                    "Recherche des VG / PG... "
+                    "Traitement des VG / PG... "
                     f"{index + 1:,} / "
-                    f"{total_rows:,} "
-                    f"| SAV à créer : "
-                    f"{len(rows_to_create):,}"
+                    f"{total_rows:,}"
                 ),
             )
 
     # ======================================================
     # ETAPE 3
-    # AJOUT DES LIGNES SAV
+    # CREATION DES LIGNES SAV
     # ======================================================
 
     rows_created = len(
         rows_to_create
     )
 
+    created_ids = []
+
     next_output_row = (
         output_data_row
     )
 
-    created_ids = []
-
     progress.progress(
         60,
         text=(
-            f"Ajout de {rows_created:,} "
+            f"Création de "
+            f"{rows_created:,} "
             "ligne(s) SAV..."
         ),
     )
@@ -923,6 +927,7 @@ def process_heidenhain(
 
         copy_selected_row(
             source_ws=source_ws,
+            values_ws=values_ws,
             target_ws=output_ws,
             source_row=source_row,
             target_row=next_output_row,
@@ -930,10 +935,6 @@ def process_heidenhain(
             output_columns=output_columns,
             new_id=new_id,
         )
-
-        # --------------------------------------------------
-        # HAUTEUR DE LIGNE
-        # --------------------------------------------------
 
         output_ws.row_dimensions[
             next_output_row
@@ -954,16 +955,25 @@ def process_heidenhain(
             or index == rows_created - 1
         ):
 
-            percent = 60 + int(
-                (
-                    (index + 1)
-                    / max(1, rows_created)
+            percent = (
+                60
+                + int(
+                    (
+                        (index + 1)
+                        / max(
+                            1,
+                            rows_created,
+                        )
+                    )
+                    * 30
                 )
-                * 30
             )
 
             progress.progress(
-                min(percent, 90),
+                min(
+                    percent,
+                    90,
+                ),
                 text=(
                     "Création des lignes SAV... "
                     f"{index + 1:,} / "
@@ -973,12 +983,12 @@ def process_heidenhain(
 
     # ======================================================
     # ETAPE 4
-    # LARGEUR DES COLONNES
+    # LARGEURS
     # ======================================================
 
     progress.progress(
         92,
-        text="Mise en forme du fichier...",
+        text="Mise en forme...",
     )
 
     for output_col_index, column_name in enumerate(
@@ -1017,13 +1027,12 @@ def process_heidenhain(
             ].width = source_width
 
     # ======================================================
-    # FIGER LES EN-TETES
+    # FIGER L'EN-TETE
     # ======================================================
 
     output_ws.freeze_panes = "A2"
 
     # ======================================================
-    # ETAPE 5
     # SAUVEGARDE
     # ======================================================
 
@@ -1040,7 +1049,9 @@ def process_heidenhain(
 
     output.seek(0)
 
-    result = output.getvalue()
+    result_bytes = (
+        output.getvalue()
+    )
 
     # ======================================================
     # FERMETURE
@@ -1048,6 +1059,7 @@ def process_heidenhain(
 
     output_workbook.close()
     workbook.close()
+    workbook_values.close()
 
     progress.progress(
         100,
@@ -1060,43 +1072,33 @@ def process_heidenhain(
 
     stats = {
         "total_source_rows": total_rows,
-
         "vg_count": vg_count,
-
         "pg_count": pg_count,
-
         "vg_pg_found": (
             vg_count + pg_count
         ),
-
         "rows_created": rows_created,
-
         "duplicates": duplicate_count,
-
         "empty_ids": empty_id_count,
-
         "created_ids": created_ids,
-
         "output_total_rows": (
             next_output_row - 1
         ),
-
-        "source_columns": source_columns,
-
-        "status_column_number": status_col,
-
-        "id_column_number": id_col,
     }
 
-    return result, stats
+    return (
+        result_bytes,
+        stats,
+    )
 
 
 # ==========================================================
 # INTERFACE
 # ==========================================================
 
-st.header("📂 1. Import des fichiers")
-
+st.header(
+    "📂 1. Import des fichiers"
+)
 
 col1, col2 = st.columns(2)
 
@@ -1108,7 +1110,7 @@ col1, col2 = st.columns(2)
 with col1:
 
     st.subheader(
-        "📘 Fichier 1 — Prix Heidenhain"
+        "📘 Fichier Prix Heidenhain"
     )
 
     heidenhain_file = st.file_uploader(
@@ -1134,10 +1136,7 @@ with col1:
                 )
             )
 
-            if (
-                heidenhain_sheet
-                in sheet_names
-            ):
+            if heidenhain_sheet in sheet_names:
 
                 st.success(
                     f"✅ Feuille "
@@ -1176,7 +1175,7 @@ with col1:
 with col2:
 
     st.subheader(
-        "📗 Fichier 2 — Import Odoo"
+        "📗 Fichier Odoo"
     )
 
     odoo_file = st.file_uploader(
@@ -1197,13 +1196,13 @@ with col2:
         )
 
         st.info(
-            "Le traitement du fichier Odoo sera "
-            "ajouté à l'étape suivante."
+            "Le traitement Odoo sera ajouté "
+            "dans l'étape suivante."
         )
 
 
 # ==========================================================
-# PREPARATION DU FICHIER
+# PREPARATION
 # ==========================================================
 
 st.divider()
@@ -1226,20 +1225,19 @@ else:
         """
         Le traitement va :
 
-        - lire la feuille configurée ;
-        - utiliser la ligne configurée comme ligne d'en-têtes ;
-        - lire les données à partir de la ligne configurée ;
+        - conserver toutes les lignes du fichier source ;
         - conserver uniquement les colonnes configurées ;
-        - compter tous les statuts **VG** et **PG** du fichier complet ;
-        - créer un `ID_SAV` pour chaque VG / PG ;
-        - vérifier que cet `ID_SAV` n'existe pas déjà ;
-        - ajouter uniquement les nouvelles lignes SAV à la fin ;
-        - générer un nouveau fichier Excel.
+        - rechercher les statuts **VG** et **PG** ;
+        - créer les `ID_SAV` ;
+        - vérifier les doublons ;
+        - ajouter les nouvelles lignes SAV à la fin ;
+        - récupérer la **valeur calculée** de `Prix (SAV)` ;
+        - créer un nouveau fichier Excel.
         """
     )
 
     # ======================================================
-    # BOUTON DE TRAITEMENT
+    # BOUTON
     # ======================================================
 
     if st.button(
@@ -1267,11 +1265,9 @@ else:
                 )
             )
 
-            # --------------------------------------------------
-            # IMPORTANT :
-            # Le résultat est conservé dans la session.
-            # Un rerun Streamlit ne le fera donc pas disparaître.
-            # --------------------------------------------------
+            # ==================================================
+            # SAUVEGARDE SESSION
+            # ==================================================
 
             st.session_state.result_bytes = (
                 result_bytes
@@ -1299,20 +1295,12 @@ else:
 
 
 # ==========================================================
-# AFFICHAGE DU RESULTAT
-#
-# Cette partie est volontairement EN DEHORS
-# du bouton de traitement.
-#
-# Ainsi, quand Streamlit fait un rerun,
-# le résultat reste affiché.
+# RESULTAT
 # ==========================================================
 
 if (
-    st.session_state.result_bytes
-    is not None
-    and st.session_state.result_stats
-    is not None
+    st.session_state.result_bytes is not None
+    and st.session_state.result_stats is not None
 ):
 
     stats = (
@@ -1322,7 +1310,7 @@ if (
     st.divider()
 
     st.header(
-        "📊 Résultat du traitement"
+        "📊 Résultat"
     )
 
     # ======================================================
@@ -1369,35 +1357,38 @@ if (
         )
 
     # ======================================================
-    # INFORMATIONS COMPLEMENTAIRES
+    # INFOS
     # ======================================================
+
+    st.info(
+        f"🔎 {stats['vg_pg_found']:,} "
+        "ligne(s) VG / PG trouvée(s) dans le fichier complet."
+    )
 
     if stats["empty_ids"] > 0:
 
         st.warning(
-            f"⚠️ {stats['empty_ids']:,} ligne(s) "
-            "VG/PG ont été ignorées car leur ID était vide."
+            f"⚠️ {stats['empty_ids']:,} "
+            "ligne(s) VG / PG ignorée(s) "
+            "car leur ID était vide."
         )
 
-    st.info(
-        f"🔎 {stats['vg_pg_found']:,} ligne(s) "
-        "ont le statut VG ou PG dans le fichier complet."
-    )
-
     # ======================================================
-    # NOUVEAUX IDS
+    # IDS CREES
     # ======================================================
 
     if stats["created_ids"]:
 
         st.subheader(
-            "🆕 Nouvelles références créées"
+            "🆕 Nouvelles références SAV"
         )
 
         ids_df = pd.DataFrame(
             {
                 "Nouveau ID": (
-                    stats["created_ids"]
+                    stats[
+                        "created_ids"
+                    ]
                 )
             }
         )
@@ -1411,15 +1402,12 @@ if (
     else:
 
         st.warning(
-            "Aucune nouvelle référence SAV n'a été créée."
+            "Aucune nouvelle référence SAV "
+            "n'a été créée."
         )
 
     # ======================================================
     # TELECHARGEMENT
-    #
-    # IMPORTANT :
-    # Le bouton utilise session_state.
-    # Il ne relance PAS le traitement.
     # ======================================================
 
     st.subheader(
@@ -1431,7 +1419,9 @@ if (
             "⬇️ Télécharger le fichier "
             "Heidenhain préparé"
         ),
-        data=st.session_state.result_bytes,
+        data=(
+            st.session_state.result_bytes
+        ),
         file_name=(
             st.session_state.result_file_name
             or "Prix_Heidenhain_prepare.xlsx"
@@ -1459,8 +1449,7 @@ st.info(
     """
     Le fichier Heidenhain est maintenant préparé.
 
-    Le fichier `Sheet1` d'Odoo sera traité dans une
-    deuxième étape, en utilisant les numéros de colonnes
-    conformément à la structure de ton fichier d'import.
+    Le traitement du fichier Odoo sera ajouté
+    dans une prochaine étape.
     """
 )
