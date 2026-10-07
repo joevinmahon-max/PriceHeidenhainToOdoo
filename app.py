@@ -96,7 +96,7 @@ id_column = st.sidebar.text_input(
 st.sidebar.markdown("---")
 st.sidebar.subheader("📋 Colonnes à conserver")
 
-output_columns_text = st.sidebar.text_area(
+OUTPUT_COLUMNS_text = st.sidebar.text_area(
     "Colonnes",
     value="\n".join(DEFAULT_OUTPUT_COLUMNS),
     height=180,
@@ -106,9 +106,10 @@ output_columns_text = st.sidebar.text_area(
     ),
 )
 
+# Variable utilisée par tout le reste du programme
 OUTPUT_COLUMNS = [
     column.strip()
-    for column in output_columns_text.splitlines()
+    for column in OUTPUT_COLUMNS_text.splitlines()
     if column.strip()
 ]
 
@@ -239,7 +240,7 @@ def copy_selected_row(
     source_row,
     target_row,
     source_columns,
-    output_columns,
+    OUTPUT_COLUMNS,
     new_id=None,
 ):
     """
@@ -251,7 +252,7 @@ def copy_selected_row(
     """
 
     for output_col_index, column_name in enumerate(
-        output_columns,
+        OUTPUT_COLUMNS,
         start=1,
     ):
 
@@ -286,7 +287,7 @@ def copy_selected_row(
         # dans le fichier résultant.
 
         id_output_index = (
-            output_columns.index("ID") + 1
+            OUTPUT_COLUMNS.index("ID") + 1
         )
 
         target_ws.cell(
@@ -306,7 +307,7 @@ def process_heidenhain(
     data_start_row,
     status_column,
     id_column,
-    output_columns,
+    OUTPUT_COLUMNS,
 ):
     """
     Traitement du fichier Prix Heidenhain.
@@ -336,19 +337,19 @@ def process_heidenhain(
             "supérieure à la ligne des en-têtes."
         )
 
-    if "ID" not in output_columns:
+    if "ID" not in OUTPUT_COLUMNS:
         raise ValueError(
             "La colonne 'ID' doit obligatoirement "
             "faire partie des colonnes conservées."
         )
 
-    if status_column not in output_columns:
+    if status_column not in OUTPUT_COLUMNS:
         raise ValueError(
             f"La colonne '{status_column}' doit faire "
             "partie des colonnes conservées."
         )
 
-    if id_column not in output_columns:
+    if id_column not in OUTPUT_COLUMNS:
         raise ValueError(
             f"La colonne '{id_column}' doit faire "
             "partie des colonnes conservées."
@@ -386,7 +387,7 @@ def process_heidenhain(
 
     required_columns = list(
         dict.fromkeys(
-            output_columns
+            OUTPUT_COLUMNS
             + [
                 status_column,
                 id_column,
@@ -443,7 +444,7 @@ def process_heidenhain(
     # ------------------------------------------------------
 
     for output_col_index, column_name in enumerate(
-        output_columns,
+        OUTPUT_COLUMNS,
         start=1,
     ):
 
@@ -572,7 +573,7 @@ def process_heidenhain(
             source_row=source_row,
             target_row=output_data_row,
             source_columns=source_columns,
-            output_columns=output_columns,
+            OUTPUT_COLUMNS=OUTPUT_COLUMNS,
         )
 
         # Conservation de la hauteur de ligne
@@ -749,7 +750,7 @@ def process_heidenhain(
             source_row=source_row,
             target_row=next_output_row,
             source_columns=source_columns,
-            output_columns=output_columns,
+            OUTPUT_COLUMNS=OUTPUT_COLUMNS,
             new_id=new_id,
         )
 
@@ -795,7 +796,7 @@ def process_heidenhain(
     # ======================================================
 
     for output_col_index, column_name in enumerate(
-        output_columns,
+        OUTPUT_COLUMNS,
         start=1,
     ):
 
@@ -1112,18 +1113,18 @@ if (
         # Colonnes à conserver
         # --------------------------------------------------
 
-        missing_output_columns = [
+        missing_OUTPUT_COLUMNS = [
             column
-            for column in output_columns
+            for column in OUTPUT_COLUMNS
             if column not in columns
         ]
 
-        if missing_output_columns:
+        if missing_OUTPUT_COLUMNS:
 
             st.error(
                 "❌ Colonnes nécessaires absentes : "
                 + ", ".join(
-                    missing_output_columns
+                    missing_OUTPUT_COLUMNS
                 )
             )
 
@@ -1191,7 +1192,7 @@ if (
         )
 
         st.write(
-            output_columns
+            OUTPUT_COLUMNS
         )
 
         # --------------------------------------------------
@@ -1269,7 +1270,7 @@ else:
                     ),
                     status_column=status_column,
                     id_column=id_column,
-                    output_columns=output_columns,
+                    OUTPUT_COLUMNS=OUTPUT_COLUMNS,
                 )
             )
 
