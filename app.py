@@ -65,6 +65,19 @@ HEIDENHAIN_AVAILABLE_COLUMNS = [
     "Groupe Produit",
     "Prix (PPC)",
     "Prix (SAV)",
+    "Date expiration",
+    "Pays d'origine",
+    "Code TVA",
+    "Poids Net",
+    "Poids Brut",
+    "ROHS",
+    "LP1 2027",
+    "Coef",
+    "Prix (PPC) 2027",
+    "Prix (SAV) 2027",
+    "Augmentation",
+    "COEF2",
+    "Prix HA €",
 ]
 
 DEFAULT_OUTPUT_COLUMNS = [
@@ -75,6 +88,7 @@ DEFAULT_OUTPUT_COLUMNS = [
     "Groupe Produit",
     "Prix (PPC)",
     "Prix (SAV)",
+    "Prix HA €",
 ]
 
 
@@ -1827,6 +1841,26 @@ st.sidebar.header(
 # ==========================================================
 
 st.sidebar.subheader(
+    "📋 Colonnes à conserver à l'étape 1"
+)
+
+heidenhain_output_columns = st.sidebar.multiselect(
+    "Sélectionner les colonnes à garder",
+    options=HEIDENHAIN_AVAILABLE_COLUMNS,
+    default=DEFAULT_OUTPUT_COLUMNS,
+    help=(
+        "Ces colonnes seront conservées dans le fichier "
+        "Heidenhain préparé."
+    ),
+)
+
+if "ID" not in heidenhain_output_columns:
+
+    st.sidebar.error(
+        "⚠️ La colonne ID est obligatoire."
+    )
+    
+st.sidebar.subheader(
     "📘 Fichier Heidenhain"
 )
 
@@ -1866,25 +1900,6 @@ sav_column = st.sidebar.text_input(
     "Prix (SAV)",
 )
 
-st.sidebar.subheader(
-    "📋 Colonnes à conserver à l'étape 1"
-)
-
-heidenhain_output_columns = st.sidebar.multiselect(
-    "Sélectionner les colonnes à garder",
-    options=HEIDENHAIN_AVAILABLE_COLUMNS,
-    default=DEFAULT_OUTPUT_COLUMNS,
-    help=(
-        "Ces colonnes seront conservées dans le fichier "
-        "Heidenhain préparé."
-    ),
-)
-
-if "ID" not in heidenhain_output_columns:
-
-    st.sidebar.error(
-        "⚠️ La colonne ID est obligatoire."
-    )
 
 
 
