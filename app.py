@@ -328,7 +328,7 @@ def copy_heidenhain_row(
             ).value
             )
         
-        elif column_name == "Prix HA €":
+        elif column_name == "Prix HA":
         
             target_cell.value = (
             values_ws.cell(
@@ -1911,10 +1911,7 @@ heidenhain_header_row = st.sidebar.number_input(
     value=4,
 )
 
-status_column = st.sidebar.text_input(
-    "Colonne Statut",
-    "Statut",
-)
+status_column = "Statut"
 
 id_column = st.sidebar.text_input(
     "Colonne ID",
