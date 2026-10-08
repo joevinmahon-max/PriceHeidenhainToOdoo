@@ -2,21 +2,30 @@
 # PREPARATION PRIX HEIDENHAIN + MISE EN FORME ODOO
 # JMA
 #
+# VERSION AVEC MAPPING DYNAMIQUE HEIDENHAIN -> ODOO
+#
 # ETAPE 1 :
+# - Sélection des colonnes Heidenhain à conserver
 # - Préparation du fichier Heidenhain
 #
 # ETAPE 2 :
+# - Pour chaque colonne Heidenhain conservée,
+#   choix de la colonne correspondante dans Odoo
 # - Mise à jour / création des références Odoo
 # - Recherche catégorie optimisée en mémoire
-# - Compatible avec de gros fichiers
 #
-# AMELIORATIONS :
-# - Boutons verrouillés pendant les calculs
-# - Impossible de lancer deux fois le même traitement
-# - Affichage immédiat "Calcul en cours"
-# - Barre de progression visible
-# - Messages d'étapes en direct
-# - Déverrouillage automatique en cas d'erreur
+# REGLE PRINCIPALE :
+#
+# Exemple :
+#
+# Heidenhain                  Odoo
+# ------------------------------------------------
+# ID                          default_code
+# Description                 name
+# Marque                      x_studio_marque
+# Prix (PPC)                  list_price
+# Prix HA                     standard_price
+#
 # ==========================================================
 
 import streamlit as st
@@ -51,12 +60,11 @@ DEFAULT_STATE = {
     "odoo_result": None,
     "odoo_stats": None,
 
-    # ------------------------------------------------------
-    # VERROUS DE CALCUL
-    # ------------------------------------------------------
-
     "heidenhain_processing": False,
     "odoo_processing": False,
+
+    # Mapping Heidenhain -> Odoo
+    "odoo_mapping": {},
 }
 
 for key, value in DEFAULT_STATE.items():
@@ -73,6 +81,7 @@ STATUS_TO_DUPLICATE = {
     "VG",
     "PG",
 }
+
 
 HEIDENHAIN_AVAILABLE_COLUMNS = [
     "ID",
@@ -96,6 +105,7 @@ HEIDENHAIN_AVAILABLE_COLUMNS = [
     "COEF2",
     "Prix HA",
 ]
+
 
 DEFAULT_OUTPUT_COLUMNS = [
     "ID",
@@ -212,7 +222,7 @@ def copy_row_style(
 
 
 # ==========================================================
-# RECHERCHE COLONNE
+# RECHERCHE COLONNES
 # ==========================================================
 
 def find_column(
@@ -269,6 +279,56 @@ def find_columns(
             ]
 
     return result
+
+
+# ==========================================================
+# LECTURE DES COLONNES D'UNE FEUILLE
+# ==========================================================
+
+def get_headers(
+    uploaded_file,
+    sheet_name,
+    header_row,
+):
+
+    uploaded_file.seek(0)
+
+    wb = openpyxl.load_workbook(
+        uploaded_file,
+        read_only=True,
+        data_only=False,
+    )
+
+    if sheet_name not in wb.sheetnames:
+
+        names = ", ".join(
+            wb.sheetnames
+        )
+
+        wb.close()
+
+        raise ValueError(
+            f"Feuille '{sheet_name}' introuvable.\n"
+            f"Feuilles disponibles : {names}"
+        )
+
+    ws = wb[
+        sheet_name
+    ]
+
+    headers = []
+
+    for cell in ws[header_row]:
+
+        if cell.value not in (None, ""):
+
+            headers.append(
+                str(cell.value).strip()
+            )
+
+    wb.close()
+
+    return headers
 
 
 # ==========================================================
@@ -330,20 +390,13 @@ def copy_heidenhain_row(
         )
 
         # --------------------------------------------------
-        # Prix SAV
-        # Prix HA
+        # Prix calculés
         # --------------------------------------------------
 
-        if column_name == "Prix (SAV)":
-
-            target_cell.value = (
-                values_ws.cell(
-                    row=source_row,
-                    column=source_col,
-                ).value
-            )
-
-        elif column_name == "Prix HA":
+        if column_name in (
+            "Prix (SAV)",
+            "Prix HA",
+        ):
 
             target_cell.value = (
                 values_ws.cell(
@@ -362,6 +415,10 @@ def copy_heidenhain_row(
             source_cell,
             target_cell,
         )
+
+    # ------------------------------------------------------
+    # Nouveau ID SAV
+    # ------------------------------------------------------
 
     if new_id is not None:
 
@@ -421,7 +478,7 @@ def process_heidenhain(
         )
 
     # ======================================================
-    # MESSAGE INITIAL
+    # OUVERTURE
     # ======================================================
 
     if status_display is not None:
@@ -436,10 +493,6 @@ def process_heidenhain(
             2,
             text="📂 Ouverture du fichier Heidenhain..."
         )
-
-    # ======================================================
-    # OUVERTURE FORMULES
-    # ======================================================
 
     uploaded_file.seek(0)
 
@@ -465,6 +518,10 @@ def process_heidenhain(
         sheet_name
     ]
 
+    # ======================================================
+    # VALEURS CALCULEES
+    # ======================================================
+
     if status_display is not None:
 
         status_display.info(
@@ -477,10 +534,6 @@ def process_heidenhain(
             5,
             text="📊 Lecture des valeurs calculées..."
         )
-
-    # ======================================================
-    # OUVERTURE VALEURS
-    # ======================================================
 
     uploaded_file.seek(0)
 
@@ -538,13 +591,13 @@ def process_heidenhain(
     ]
 
     # ======================================================
-    # DERNIERE LIGNE REELLEMENT REMPLIE
+    # DERNIERE LIGNE
     # ======================================================
 
     if status_display is not None:
 
         status_display.info(
-            "🔎 Recherche de la dernière ligne..."
+            "🔎 Recherche des lignes à traiter..."
         )
 
     if progress is not None:
@@ -716,6 +769,10 @@ def process_heidenhain(
         elif status == "PG":
 
             pg_count += 1
+
+        # --------------------------------------------------
+        # CREATION SAV
+        # --------------------------------------------------
 
         if status in STATUS_TO_DUPLICATE:
 
@@ -963,8 +1020,7 @@ def process_heidenhain(
 
 
 # ==========================================================
-# ETAPE 2
-# CHARGEMENT UNIQUE DES CATEGORIES
+# CATEGORIES
 # ==========================================================
 
 def load_category_mapping(
@@ -1060,45 +1116,33 @@ def load_category_mapping(
                 normalized_text
             ] = category_id
 
-        if "-" in category_text:
+        for separator in (
+            "-",
+            "–",
+        ):
 
-            first_part = (
-                category_text
-                .split("-", 1)[0]
-                .strip()
-            )
+            if separator in category_text:
 
-            if first_part:
-
-                normalized_first = normalize(
-                    first_part
+                first_part = (
+                    category_text
+                    .split(separator, 1)[0]
+                    .strip()
                 )
 
-                if normalized_first not in mapping:
+                if first_part:
 
-                    mapping[
+                    normalized_first = normalize(
+                        first_part
+                    )
+
+                    if (
                         normalized_first
-                    ] = category_id
+                        not in mapping
+                    ):
 
-        if "–" in category_text:
-
-            first_part = (
-                category_text
-                .split("–", 1)[0]
-                .strip()
-            )
-
-            if first_part:
-
-                normalized_first = normalize(
-                    first_part
-                )
-
-                if normalized_first not in mapping:
-
-                    mapping[
-                        normalized_first
-                    ] = category_id
+                        mapping[
+                            normalized_first
+                        ] = category_id
 
     wb.close()
 
@@ -1106,7 +1150,7 @@ def load_category_mapping(
 
 
 # ==========================================================
-# RECHERCHE CATEGORIE RAPIDE
+# RECHERCHE CATEGORIE
 # ==========================================================
 
 def find_category_id_fast(
@@ -1138,48 +1182,39 @@ def find_category_id_fast(
 
         return category_id
 
-    if "-" in group:
+    for separator in (
+        "-",
+        "–",
+    ):
 
-        first_part = (
-            group
-            .split("-", 1)[0]
-            .strip()
-        )
+        if separator in group:
 
-        if first_part:
-
-            category_id = category_mapping.get(
-                normalize(first_part)
+            first_part = (
+                group
+                .split(separator, 1)[0]
+                .strip()
             )
 
-            if category_id is not None:
+            if first_part:
 
-                return category_id
+                category_id = (
+                    category_mapping.get(
+                        normalize(
+                            first_part
+                        )
+                    )
+                )
 
-    if "–" in group:
+                if category_id is not None:
 
-        first_part = (
-            group
-            .split("–", 1)[0]
-            .strip()
-        )
-
-        if first_part:
-
-            category_id = category_mapping.get(
-                normalize(first_part)
-            )
-
-            if category_id is not None:
-
-                return category_id
+                    return category_id
 
     return None
 
 
 # ==========================================================
 # ETAPE 2
-# TRAITEMENT ODOO
+# TRAITEMENT ODOO AVEC MAPPING
 # ==========================================================
 
 def process_odoo(
@@ -1191,34 +1226,17 @@ def process_odoo(
     odoo_sheet,
     category_sheet,
 
-    heidenhain_header_row,
     odoo_header_row,
 
     category_id_col,
     category_search_col,
 
-    heidenhain_id_column,
+    mapping,
+
     heidenhain_status_column,
     heidenhain_group_column,
     heidenhain_ppc_column,
     heidenhain_sav_column,
-    heidenhain_description,
-    heidenhain_marque,
-    heidenhain_prixHA,
-
-    odoo_reference_column,
-    odoo_sales_status_column,
-    odoo_price_column,
-    odoo_barcode_column,
-    odoo_supplier_column,
-    odoo_purchase_column,
-    odoo_sale_column,
-    odoo_type_column,
-    odoo_invoice_policy_column,
-    odoo_category_column,
-    odoo_name,
-    odoo_brand_description,
-    odoo_prixHA,
 
     progress=None,
     status_display=None,
@@ -1235,6 +1253,24 @@ def process_odoo(
     timer_odoo = st.empty()
     timer_index = st.empty()
     timer_main = st.empty()
+
+    # ======================================================
+    # VERIFICATION MAPPING
+    # ======================================================
+
+    if "ID" not in mapping:
+
+        raise ValueError(
+            "La colonne Heidenhain 'ID' doit obligatoirement "
+            "être associée à une colonne Odoo."
+        )
+
+    if not mapping["ID"]:
+
+        raise ValueError(
+            "La colonne Odoo correspondant à 'ID' "
+            "n'est pas définie."
+        )
 
     # ======================================================
     # 1. CATEGORIES
@@ -1272,16 +1308,6 @@ def process_odoo(
         time.perf_counter()
         - start_categories
     )
-
-    if progress is not None:
-
-        progress.progress(
-            10,
-            text=(
-                f"📂 Catégories chargées : "
-                f"{category_rows:,}"
-            ),
-        )
 
     # ======================================================
     # 2. HEIDENHAIN
@@ -1338,26 +1364,31 @@ def process_odoo(
     # 3. COLONNES HEIDENHAIN
     # ======================================================
 
-    h_column_names = [
-        heidenhain_id_column,
-        heidenhain_status_column,
-        heidenhain_group_column,
-        heidenhain_ppc_column,
-        heidenhain_sav_column,
-        heidenhain_description,
-        heidenhain_marque,
-        heidenhain_prixHA,
-    ]
+    # On récupère toutes les colonnes nécessaires :
+    # - celles du mapping
+    # - celles utilisées par les règles métier
+
+    required_h_columns = list(
+        dict.fromkeys(
+            list(mapping.keys())
+            + [
+                heidenhain_status_column,
+                heidenhain_group_column,
+                heidenhain_ppc_column,
+                heidenhain_sav_column,
+            ]
+        )
+    )
 
     h_columns = find_columns(
         h_ws,
         1,
-        h_column_names,
+        required_h_columns,
     )
 
     missing_h = [
         x
-        for x in h_column_names
+        for x in required_h_columns
         if x not in h_columns
     ]
 
@@ -1367,15 +1398,8 @@ def process_odoo(
 
         raise ValueError(
             "Colonnes introuvables "
-            "dans le fichier 3 : "
+            "dans le fichier Heidenhain : "
             + ", ".join(missing_h)
-        )
-
-    if progress is not None:
-
-        progress.progress(
-            20,
-            text="📘 Fichier Heidenhain chargé..."
         )
 
     # ======================================================
@@ -1433,37 +1457,26 @@ def process_odoo(
     # 5. COLONNES ODOO
     # ======================================================
 
-    if status_display is not None:
+    mapped_odoo_columns = list(
+        mapping.values()
+    )
 
-        status_display.info(
-            "🔎 Recherche des colonnes Odoo..."
+    # Suppression des éventuels doublons
+    mapped_odoo_columns = list(
+        dict.fromkeys(
+            mapped_odoo_columns
         )
-
-    odoo_column_names = [
-        odoo_reference_column,
-        odoo_sales_status_column,
-        odoo_price_column,
-        odoo_barcode_column,
-        odoo_supplier_column,
-        odoo_purchase_column,
-        odoo_sale_column,
-        odoo_type_column,
-        odoo_invoice_policy_column,
-        odoo_category_column,
-        odoo_name,
-        odoo_brand_description,
-        odoo_prixHA,
-    ]
+    )
 
     odoo_columns = find_columns(
         ws,
         int(odoo_header_row),
-        odoo_column_names,
+        mapped_odoo_columns,
     )
 
     missing_odoo = [
         x
-        for x in odoo_column_names
+        for x in mapped_odoo_columns
         if x not in odoo_columns
     ]
 
@@ -1506,8 +1519,12 @@ def process_odoo(
 
     reference_index = {}
 
+    reference_odoo_column_name = (
+        mapping["ID"]
+    )
+
     reference_col = odoo_columns[
-        odoo_reference_column
+        reference_odoo_column_name
     ]
 
     max_odoo_row = ws.max_row
@@ -1550,51 +1567,40 @@ def process_odoo(
         )
 
     # ======================================================
-    # 7. COLONNES
+    # 7. COLONNES SPECIALES
     # ======================================================
 
+    # ------------------------------------------------------
+    # Heidenhain
+    # ------------------------------------------------------
+
+    h_id_col = h_columns[
+        "ID"
+    ]
+
+    h_status_col = h_columns[
+        heidenhain_status_column
+    ]
+
+    h_group_col = h_columns[
+        heidenhain_group_column
+    ]
+
+    h_ppc_col = h_columns[
+        heidenhain_ppc_column
+    ]
+
+    h_sav_col = h_columns[
+        heidenhain_sav_column
+    ]
+
+    # ------------------------------------------------------
+    # Odoo
+    # ------------------------------------------------------
+
+    # La colonne ID est toujours la colonne de recherche.
     col_ref = odoo_columns[
-        odoo_reference_column
-    ]
-
-    col_status = odoo_columns[
-        odoo_sales_status_column
-    ]
-
-    col_price = odoo_columns[
-        odoo_price_column
-    ]
-
-    col_barcode = odoo_columns[
-        odoo_barcode_column
-    ]
-
-    col_supplier = odoo_columns[
-        odoo_supplier_column
-    ]
-
-    col_purchase = odoo_columns[
-        odoo_purchase_column
-    ]
-
-    col_sale = odoo_columns[
-        odoo_sale_column
-    ]
-
-    col_type = odoo_columns[
-        odoo_type_column
-    ]
-
-    col_invoice = odoo_columns[
-        odoo_invoice_policy_column
-    ]
-
-    col_category = odoo_columns[
-        odoo_category_column
-    ]
-
-    col_prixHA = odoo_columns[
-        odoo_prixHA
+        mapping["ID"]
     ]
 
     # ======================================================
@@ -1641,34 +1647,6 @@ def process_odoo(
         )
 
     # ======================================================
-    # COLONNES HEIDENHAIN
-    # ======================================================
-
-    h_id_col = h_columns[
-        heidenhain_id_column
-    ]
-
-    h_status_col = h_columns[
-        heidenhain_status_column
-    ]
-
-    h_group_col = h_columns[
-        heidenhain_group_column
-    ]
-
-    h_ppc_col = h_columns[
-        heidenhain_ppc_column
-    ]
-
-    h_sav_col = h_columns[
-        heidenhain_sav_column
-    ]
-
-    h_prixHA_col = h_columns[
-        heidenhain_prixHA
-    ]
-
-    # ======================================================
     # BOUCLE PRINCIPALE
     # ======================================================
 
@@ -1706,9 +1684,9 @@ def process_odoo(
 
             break
 
-        # --------------------------------------------------
-        # Lecture rapide
-        # --------------------------------------------------
+        # ==================================================
+        # LECTURE DES CHAMPS
+        # ==================================================
 
         try:
 
@@ -1728,17 +1706,13 @@ def process_odoo(
                 h_sav_col - 1
             ]
 
-            prixHA = row_values[
-                h_prixHA_col - 1
-            ]
-
         except IndexError:
 
             continue
 
-        # --------------------------------------------------
-        # Reference
-        # --------------------------------------------------
+        # ==================================================
+        # REFERENCE
+        # ==================================================
 
         reference = str(
             reference
@@ -1783,52 +1757,45 @@ def process_odoo(
             created += 1
 
         # ==================================================
-        # DESCRIPTION
+        # COPIE DES COLONNES MAPEES
         # ==================================================
 
-        description = row_values[
-            h_columns[
-                heidenhain_description
-            ] - 1
-        ]
+        for heidenhain_column, odoo_column in mapping.items():
 
-        name_cell = ws.cell(
-            row=target_row,
-            column=odoo_columns[
-                odoo_name
-            ],
-        )
+            # ----------------------------------------------
+            # On ignore les champs spéciaux ici
+            # ----------------------------------------------
 
-        if name_cell.value in (
-            None,
-            "",
-        ):
+            if heidenhain_column in (
+                "Prix (PPC)",
+                "Prix (SAV)",
+                "Groupe Produit",
+            ):
 
-            name_cell.value = description
+                continue
 
-        # ==================================================
-        # MARQUE
-        # ==================================================
+            source_col = h_columns[
+                heidenhain_column
+            ]
 
-        marque = row_values[
-            h_columns[
-                heidenhain_marque
-            ] - 1
-        ]
+            target_col = odoo_columns[
+                odoo_column
+            ]
 
-        brand_cell = ws.cell(
-            row=target_row,
-            column=odoo_columns[
-                odoo_brand_description
-            ],
-        )
+            try:
 
-        if brand_cell.value in (
-            None,
-            "",
-        ):
+                value = row_values[
+                    source_col - 1
+                ]
 
-            brand_cell.value = marque
+            except IndexError:
+
+                value = None
+
+            ws.cell(
+                row=target_row,
+                column=target_col,
+            ).value = value
 
         # ==================================================
         # PRIX
@@ -1845,6 +1812,57 @@ def process_odoo(
         else:
 
             price = ppc
+
+        # --------------------------------------------------
+        # Si Prix PPC est mappé vers une colonne Odoo,
+        # on y écrit le prix normal / SAV.
+        # --------------------------------------------------
+
+        if "Prix (PPC)" in mapping:
+
+            price_odoo_column = mapping[
+                "Prix (PPC)"
+            ]
+
+            if price_odoo_column:
+
+                target_col = odoo_columns[
+                    price_odoo_column
+                ]
+
+                ws.cell(
+                    row=target_row,
+                    column=target_col,
+                ).value = price
+
+        # --------------------------------------------------
+        # Si Prix SAV est mappé vers une autre colonne,
+        # on conserve également la valeur SAV.
+        #
+        # Cela permet d'avoir :
+        #
+        # Prix (PPC) -> list_price
+        # Prix (SAV) -> x_studio_prix_sav
+        #
+        # --------------------------------------------------
+
+        if (
+            "Prix (SAV)" in mapping
+            and mapping["Prix (SAV)"]
+        ):
+
+            sav_odoo_column = mapping[
+                "Prix (SAV)"
+            ]
+
+            target_col = odoo_columns[
+                sav_odoo_column
+            ]
+
+            ws.cell(
+                row=target_row,
+                column=target_col,
+            ).value = sav
 
         # ==================================================
         # CATEGORIE
@@ -1865,89 +1883,47 @@ def process_odoo(
 
             category_missing += 1
 
+        # --------------------------------------------------
+        # Groupe Produit -> colonne Odoo mappée
+        # --------------------------------------------------
+
+        if (
+            "Groupe Produit" in mapping
+            and mapping["Groupe Produit"]
+        ):
+
+            category_odoo_column = mapping[
+                "Groupe Produit"
+            ]
+
+            target_col = odoo_columns[
+                category_odoo_column
+            ]
+
+            if category_id is not None:
+
+                ws.cell(
+                    row=target_row,
+                    column=target_col,
+                ).value = category_id
+
         # ==================================================
-        # ECRITURE
+        # STATUT
         # ==================================================
 
-        ws.cell(
-            row=target_row,
-            column=col_ref,
-        ).value = reference
+        if (
+            "Statut" in mapping
+            and mapping["Statut"]
+        ):
 
-        ws.cell(
-            row=target_row,
-            column=col_status,
-        ).value = status
-
-        ws.cell(
-            row=target_row,
-            column=col_price,
-        ).value = price
-
-        ws.cell(
-            row=target_row,
-            column=col_prixHA,
-        ).value = prixHA
-
-        # ==================================================
-        # CODE-BARRES
-        # ==================================================
-
-        if reference_is_sav:
+            target_col = odoo_columns[
+                mapping["Statut"]
+            ]
 
             ws.cell(
                 row=target_row,
-                column=col_barcode,
-            ).value = ""
-
-        else:
-
-            ws.cell(
-                row=target_row,
-                column=col_barcode,
-            ).value = (
-                f"I {reference}"
-            )
-
-        # ==================================================
-        # AUTRES CHAMPS
-        # ==================================================
-
-        ws.cell(
-            row=target_row,
-            column=col_supplier,
-        ).value = (
-            "HEIDENHAIN FRANCE"
-        )
-
-        ws.cell(
-            row=target_row,
-            column=col_purchase,
-        ).value = "VRAI"
-
-        ws.cell(
-            row=target_row,
-            column=col_sale,
-        ).value = "VRAI"
-
-        ws.cell(
-            row=target_row,
-            column=col_type,
-        ).value = "Consommable"
-
-        ws.cell(
-            row=target_row,
-            column=col_invoice,
-        ).value = (
-            "Quantités livrées"
-        )
-
-        if category_id is not None:
-
-            ws.cell(
-                row=target_row,
-                column=col_category,
-            ).value = category_id
+                column=target_col,
+            ).value = status
 
         # ==================================================
         # PROGRESSION
@@ -1992,7 +1968,7 @@ def process_odoo(
                 )
 
         # ==================================================
-        # INFOS TEMPS
+        # TEMPS
         # ==================================================
 
         if index % 100 == 0:
@@ -2124,7 +2100,8 @@ heidenhain_output_columns = st.sidebar.multiselect(
     default=DEFAULT_OUTPUT_COLUMNS,
     help=(
         "Ces colonnes seront conservées dans le fichier "
-        "Heidenhain préparé."
+        "Heidenhain préparé et pourront ensuite être "
+        "associées à des colonnes Odoo."
     ),
 )
 
@@ -2133,6 +2110,7 @@ if "ID" not in heidenhain_output_columns:
     st.sidebar.error(
         "⚠️ La colonne ID est obligatoire."
     )
+
 
 st.sidebar.subheader(
     "📘 Fichier Heidenhain"
@@ -2150,15 +2128,10 @@ heidenhain_header_row = st.sidebar.number_input(
 )
 
 status_column = "Statut"
-
 id_column = "ID"
-
 group_column = "Groupe Produit"
-
 ppc_column = "Prix (PPC)"
-
 sav_column = "Prix (SAV)"
-
 heidenhain_prixHA = "Prix HA"
 
 
@@ -2169,7 +2142,7 @@ heidenhain_prixHA = "Prix HA"
 st.sidebar.divider()
 
 st.sidebar.subheader(
-    "📗 Colonnes Odoo"
+    "📗 Fichier Odoo"
 )
 
 odoo_sheet = st.sidebar.text_input(
@@ -2181,71 +2154,6 @@ odoo_header_row = st.sidebar.number_input(
     "Ligne des en-têtes Odoo",
     min_value=1,
     value=1,
-)
-
-odoo_reference = st.sidebar.text_input(
-    "Référence",
-    "Référence interne",
-)
-
-odoo_name = st.sidebar.text_input(
-    "Nom",
-    "Nom",
-)
-
-odoo_brand_description = st.sidebar.text_input(
-    "Marque",
-    "Marque",
-)
-
-odoo_sales_status = st.sidebar.text_input(
-    "Sales Status",
-    "Sales Status",
-)
-
-odoo_price = st.sidebar.text_input(
-    "Prix de vente",
-    "Prix de vente",
-)
-
-odoo_barcode = st.sidebar.text_input(
-    "Code-barres",
-    "Code-barres",
-)
-
-odoo_supplier = st.sidebar.text_input(
-    "Fournisseur",
-    "Fournisseurs/Fournisseur",
-)
-
-odoo_purchase = st.sidebar.text_input(
-    "Peut être acheté",
-    "Peut être acheté",
-)
-
-odoo_sale = st.sidebar.text_input(
-    "Peut être vendu",
-    "Peut être vendu",
-)
-
-odoo_type = st.sidebar.text_input(
-    "Type de produit",
-    "Type de produit",
-)
-
-odoo_invoice_policy = st.sidebar.text_input(
-    "Politique de facturation",
-    "Politique de facturation",
-)
-
-odoo_category = st.sidebar.text_input(
-    "Catégorie de produits/ID",
-    "Catégorie de produits/ID",
-)
-
-odoo_prixHA = st.sidebar.text_input(
-    "Fournisseurs/Prix",
-    "Fournisseurs/Prix",
 )
 
 
@@ -2337,6 +2245,314 @@ with col3:
 
 
 # ==========================================================
+# MAPPING ODOO
+# ==========================================================
+
+st.divider()
+
+st.header(
+    "🔗 Correspondance Heidenhain → Odoo"
+)
+
+st.markdown(
+    """
+Pour chaque colonne Heidenhain sélectionnée à l'étape 1,
+choisissez la colonne correspondante dans le fichier Odoo.
+
+**Exemple :**
+
+`ID` → `default_code`
+
+`Description` → `name`
+
+`Marque` → `x_studio_marque`
+
+`Prix (PPC)` → `list_price`
+
+`Prix HA` → `standard_price`
+"""
+)
+
+
+odoo_mapping = {}
+
+
+if odoo_file is None:
+
+    st.info(
+        "📗 Importez le fichier Odoo pour pouvoir "
+        "configurer les correspondances."
+    )
+
+else:
+
+    try:
+
+        # --------------------------------------------------
+        # Lecture des feuilles
+        # --------------------------------------------------
+
+        odoo_sheet_names = get_sheet_names(
+            odoo_file
+        )
+
+        if odoo_sheet not in odoo_sheet_names:
+
+            st.warning(
+                f"⚠️ La feuille '{odoo_sheet}' "
+                "n'existe pas encore dans le fichier Odoo."
+            )
+
+        else:
+
+            # --------------------------------------------------
+            # Lecture des colonnes Odoo
+            # --------------------------------------------------
+
+            odoo_headers = get_headers(
+                uploaded_file=odoo_file,
+                sheet_name=odoo_sheet,
+                header_row=int(
+                    odoo_header_row
+                ),
+            )
+
+            if not odoo_headers:
+
+                st.warning(
+                    "⚠️ Aucune colonne Odoo trouvée."
+                )
+
+            else:
+
+                # --------------------------------------------------
+                # Configuration mapping
+                # --------------------------------------------------
+
+                st.info(
+                    f"📗 {len(odoo_headers)} colonnes "
+                    "Odoo détectées."
+                )
+
+                mapping_columns = st.columns(
+                    2
+                )
+
+                for index, heidenhain_column in enumerate(
+                    heidenhain_output_columns
+                ):
+
+                    with mapping_columns[
+                        index % 2
+                    ]:
+
+                        # --------------------------------------------------
+                        # Valeur précédente
+                        # --------------------------------------------------
+
+                        previous_value = (
+                            st.session_state
+                            .odoo_mapping
+                            .get(
+                                heidenhain_column
+                            )
+                        )
+
+                        # --------------------------------------------------
+                        # Valeur par défaut intelligente
+                        # --------------------------------------------------
+
+                        intelligent_default = None
+
+                        default_candidates = [
+                            heidenhain_column,
+                        ]
+
+                        # ID -> default_code
+                        if heidenhain_column == "ID":
+
+                            default_candidates = [
+                                "default_code",
+                                "Référence interne",
+                                "Reference",
+                                "Référence",
+                                "ID",
+                            ]
+
+                        # Description -> name
+                        elif (
+                            heidenhain_column
+                            == "Description"
+                        ):
+
+                            default_candidates = [
+                                "name",
+                                "Nom",
+                                "Description",
+                            ]
+
+                        # Marque
+                        elif (
+                            heidenhain_column
+                            == "Marque"
+                        ):
+
+                            default_candidates = [
+                                "Marque",
+                                "x_studio_marque",
+                                "Brand",
+                            ]
+
+                        # Prix PPC
+                        elif (
+                            heidenhain_column
+                            == "Prix (PPC)"
+                        ):
+
+                            default_candidates = [
+                                "list_price",
+                                "Prix de vente",
+                                "Prix",
+                            ]
+
+                        # Prix HA
+                        elif (
+                            heidenhain_column
+                            == "Prix HA"
+                        ):
+
+                            default_candidates = [
+                                "standard_price",
+                                "Fournisseurs/Prix",
+                                "Prix d'achat",
+                            ]
+
+                        # --------------------------------------------------
+                        # Recherche correspondance
+                        # --------------------------------------------------
+
+                        if previous_value in odoo_headers:
+
+                            intelligent_default = (
+                                previous_value
+                            )
+
+                        else:
+
+                            for candidate in (
+                                default_candidates
+                            ):
+
+                                if candidate in odoo_headers:
+
+                                    intelligent_default = (
+                                        candidate
+                                    )
+
+                                    break
+
+                        # --------------------------------------------------
+                        # Index défaut
+                        # --------------------------------------------------
+
+                        if (
+                            intelligent_default
+                            in odoo_headers
+                        ):
+
+                            default_index = (
+                                odoo_headers.index(
+                                    intelligent_default
+                                )
+                                + 1
+                            )
+
+                        else:
+
+                            default_index = 0
+
+                        # --------------------------------------------------
+                        # Selectbox
+                        # --------------------------------------------------
+
+                        selected_odoo_column = (
+                            st.selectbox(
+                                f"{heidenhain_column} →",
+                                options=[
+                                    "⛔ Ne pas importer"
+                                ]
+                                + odoo_headers,
+                                index=(
+                                    default_index
+                                ),
+                                key=(
+                                    "mapping_"
+                                    + heidenhain_column
+                                ),
+                            )
+                        )
+
+                        if (
+                            selected_odoo_column
+                            != "⛔ Ne pas importer"
+                        ):
+
+                            odoo_mapping[
+                                heidenhain_column
+                            ] = (
+                                selected_odoo_column
+                            )
+
+                        else:
+
+                            odoo_mapping[
+                                heidenhain_column
+                            ] = None
+
+                # --------------------------------------------------
+                # Sauvegarde
+                # --------------------------------------------------
+
+                st.session_state.odoo_mapping = (
+                    odoo_mapping
+                )
+
+    except Exception as e:
+
+        st.error(
+            f"❌ Impossible de lire les colonnes Odoo : {e}"
+        )
+
+
+# ==========================================================
+# VERIFICATION MAPPING
+# ==========================================================
+
+if heidenhain_output_columns:
+
+    if "ID" in heidenhain_output_columns:
+
+        if (
+            odoo_mapping.get("ID")
+            in (None, "")
+        ):
+
+            st.error(
+                "⚠️ La colonne Heidenhain 'ID' doit "
+                "obligatoirement être associée à une "
+                "colonne Odoo."
+            )
+
+        else:
+
+            st.success(
+                f"🔑 Clé de recherche : "
+                f"Heidenhain `ID` → "
+                f"Odoo `{odoo_mapping['ID']}`"
+            )
+
+
+# ==========================================================
 # ETAPE 1
 # ==========================================================
 
@@ -2375,10 +2591,6 @@ Le traitement va :
     # ======================================================
 
     if st.session_state.heidenhain_processing:
-
-        # --------------------------------------------------
-        # BOUTON VERROUILLE
-        # --------------------------------------------------
 
         st.button(
             "⏳ Calcul Heidenhain en cours...",
@@ -2420,10 +2632,6 @@ Le traitement va :
                 )
             )
 
-            # --------------------------------------------------
-            # SAUVEGARDE
-            # --------------------------------------------------
-
             st.session_state.heidenhain_result = (
                 result
             )
@@ -2431,10 +2639,6 @@ Le traitement va :
             st.session_state.heidenhain_stats = (
                 stats
             )
-
-            # --------------------------------------------------
-            # DEVERROUILLAGE
-            # --------------------------------------------------
 
             st.session_state.heidenhain_processing = False
 
@@ -2446,10 +2650,6 @@ Le traitement va :
 
         except Exception as e:
 
-            # --------------------------------------------------
-            # TOUJOURS DEVERROUILLER EN CAS D'ERREUR
-            # --------------------------------------------------
-
             st.session_state.heidenhain_processing = False
 
             st.error(
@@ -2457,10 +2657,6 @@ Le traitement va :
             )
 
             st.exception(e)
-
-    # ======================================================
-    # BOUTON NORMAL
-    # ======================================================
 
     else:
 
@@ -2471,16 +2667,7 @@ Le traitement va :
             key="create_heidenhain",
         ):
 
-            # --------------------------------------------------
-            # VERROUILLAGE
-            # --------------------------------------------------
-
             st.session_state.heidenhain_processing = True
-
-            # --------------------------------------------------
-            # FORCE STREAMLIT A RAFRAICHIR L'INTERFACE
-            # AVANT LE GROS CALCUL
-            # --------------------------------------------------
 
             st.rerun()
 
@@ -2541,36 +2728,59 @@ if (
 
 else:
 
-    st.markdown(
-        """
+    # ======================================================
+    # VERIFICATION MAPPING
+    # ======================================================
+
+    mapping_valid = True
+
+    if "ID" not in odoo_mapping:
+
+        mapping_valid = False
+
+        st.error(
+            "❌ La colonne ID Heidenhain doit être "
+            "associée à une colonne Odoo."
+        )
+
+    elif not odoo_mapping["ID"]:
+
+        mapping_valid = False
+
+        st.error(
+            "❌ Aucune colonne Odoo n'est associée à ID."
+        )
+
+    if mapping_valid:
+
+        st.markdown(
+            """
 Le traitement va parcourir le fichier Heidenhain
 et mettre à jour ou créer les références dans Odoo.
 
-**Règles appliquées :**
+**La référence de recherche est définie par le mapping :**
+
+`ID Heidenhain` → `colonne Odoo choisie`
+
+Les autres colonnes sont également transférées
+selon les correspondances configurées ci-dessus.
+
+**Règles métier conservées :**
 
 - Référence existante → mise à jour.
 - Référence absente → création d'une nouvelle ligne.
-- Prix normal → **Prix (PPC)**.
-- Référence `_SAV` → **Prix (SAV)**.
-- Code-barres → `I ` + référence.
-- Fournisseur → `HEIDENHAIN FRANCE`.
-- Peut être acheté → `VRAI`.
-- Peut être vendu → `VRAI`.
-- Type de produit → `Consommable`.
-- Politique de facturation → `Quantités livrées`.
-- Catégorie → recherche dans le fichier Catégorie de produit.
-        """
-    )
+- Référence `_SAV` → utilisation du `Prix (SAV)`.
+- Référence normale → utilisation du `Prix (PPC)`.
+- `Groupe Produit` → recherche de catégorie.
+- Les autres colonnes sont copiées selon le mapping.
+            """
+        )
 
     # ======================================================
     # CALCUL EN COURS
     # ======================================================
 
     if st.session_state.odoo_processing:
-
-        # --------------------------------------------------
-        # BOUTON VERROUILLE
-        # --------------------------------------------------
 
         st.button(
             "⏳ Calcul Odoo en cours...",
@@ -2593,17 +2803,9 @@ et mettre à jour ou créer les références dans Odoo.
 
         try:
 
-            # ==================================================
-            # FICHIER HEIDENHAIN PREPARE
-            # ==================================================
-
             prepared_heidenhain_file = BytesIO(
                 st.session_state.heidenhain_result
             )
-
-            # ==================================================
-            # TRAITEMENT
-            # ==================================================
 
             result, stats = process_odoo(
 
@@ -2631,10 +2833,6 @@ et mettre à jour ou créer les références dans Odoo.
                     category_sheet
                 ),
 
-                heidenhain_header_row=int(
-                    heidenhain_header_row
-                ),
-
                 odoo_header_row=int(
                     odoo_header_row
                 ),
@@ -2647,8 +2845,8 @@ et mettre à jour ou créer les références dans Odoo.
                     category_search_col
                 ),
 
-                heidenhain_id_column=(
-                    id_column
+                mapping=(
+                    odoo_mapping
                 ),
 
                 heidenhain_status_column=(
@@ -2667,70 +2865,6 @@ et mettre à jour ou créer les références dans Odoo.
                     sav_column
                 ),
 
-                heidenhain_description=(
-                    "Description"
-                ),
-
-                heidenhain_marque=(
-                    "Marque"
-                ),
-
-                heidenhain_prixHA=(
-                    heidenhain_prixHA
-                ),
-
-                odoo_reference_column=(
-                    odoo_reference
-                ),
-
-                odoo_sales_status_column=(
-                    odoo_sales_status
-                ),
-
-                odoo_price_column=(
-                    odoo_price
-                ),
-
-                odoo_barcode_column=(
-                    odoo_barcode
-                ),
-
-                odoo_supplier_column=(
-                    odoo_supplier
-                ),
-
-                odoo_purchase_column=(
-                    odoo_purchase
-                ),
-
-                odoo_sale_column=(
-                    odoo_sale
-                ),
-
-                odoo_type_column=(
-                    odoo_type
-                ),
-
-                odoo_invoice_policy_column=(
-                    odoo_invoice_policy
-                ),
-
-                odoo_category_column=(
-                    odoo_category
-                ),
-
-                odoo_name=(
-                    odoo_name
-                ),
-
-                odoo_brand_description=(
-                    odoo_brand_description
-                ),
-
-                odoo_prixHA=(
-                    odoo_prixHA
-                ),
-
                 progress=(
                     progress_odoo
                 ),
@@ -2740,10 +2874,6 @@ et mettre à jour ou créer les références dans Odoo.
                 ),
             )
 
-            # ==================================================
-            # SAUVEGARDE
-            # ==================================================
-
             st.session_state.odoo_result = (
                 result
             )
@@ -2751,10 +2881,6 @@ et mettre à jour ou créer les références dans Odoo.
             st.session_state.odoo_stats = (
                 stats
             )
-
-            # ==================================================
-            # DEVERROUILLAGE
-            # ==================================================
 
             st.session_state.odoo_processing = False
 
@@ -2766,10 +2892,6 @@ et mettre à jour ou créer les références dans Odoo.
 
         except Exception as e:
 
-            # --------------------------------------------------
-            # TOUJOURS DEVERROUILLER EN CAS D'ERREUR
-            # --------------------------------------------------
-
             st.session_state.odoo_processing = False
 
             st.error(
@@ -2778,30 +2900,20 @@ et mettre à jour ou créer les références dans Odoo.
 
             st.exception(e)
 
-    # ======================================================
-    # BOUTON NORMAL
-    # ======================================================
-
     else:
 
-        if st.button(
-            "🚀 Préparer le fichier Odoo",
-            type="primary",
-            use_container_width=True,
-            key="prepare_odoo",
-        ):
+        if mapping_valid:
 
-            # --------------------------------------------------
-            # VERROUILLAGE IMMEDIAT
-            # --------------------------------------------------
+            if st.button(
+                "🚀 Préparer le fichier Odoo",
+                type="primary",
+                use_container_width=True,
+                key="prepare_odoo",
+            ):
 
-            st.session_state.odoo_processing = True
+                st.session_state.odoo_processing = True
 
-            # --------------------------------------------------
-            # RAFRAICHISSEMENT AVANT LE CALCUL
-            # --------------------------------------------------
-
-            st.rerun()
+                st.rerun()
 
 
 # ==========================================================
