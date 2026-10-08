@@ -1521,8 +1521,13 @@ def process_odoo(
     template_row = odoo_header_row + 1
     max_odoo_col = ws.max_column
 
-    for index, row_values in enumerate(...):
-
+    for index, row_values in enumerate(
+        h_ws.iter_rows(
+            min_row=heidenhain_data_start,
+            values_only=True,
+        )
+    ):
+    
         reference = row_values[h_id_col - 1]
     
         if reference in (None, ""):
