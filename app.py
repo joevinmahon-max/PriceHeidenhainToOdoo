@@ -1015,35 +1015,24 @@ def find_category_id_fast(
 ):
 
     if groupe_produit is None:
-
         return None
 
-    group = str(
-        groupe_produit
-    ).strip()
+    group = str(groupe_produit).strip()
 
     if not group:
-
         return None
 
-    normalized_group = normalize(
-        group
+    normalized_group = normalize(group)
+
+    # Correspondance exacte
+    category_id = category_mapping.get(
+        normalized_group
     )
 
-    # ------------------------------------------------------
-    # 1. Correspondance exacte
-    # ------------------------------------------------------
+    if category_id is not None:
+        return category_id
 
-    if normalized_group in category_mapping:
-
-        return category_mapping[
-            normalized_group
-        ]
-
-    # ------------------------------------------------------
-    # 2. Partie avant "-"
-    # ------------------------------------------------------
-
+    # Partie avant "-"
     if "-" in group:
 
         first_part = (
@@ -1054,23 +1043,14 @@ def find_category_id_fast(
 
         if first_part:
 
-            normalized_first = normalize(
-                first_part
+            category_id = category_mapping.get(
+                normalize(first_part)
             )
 
-            if (
-                normalized_first
-                in category_mapping
-            ):
+            if category_id is not None:
+                return category_id
 
-                return category_mapping[
-                    normalized_first
-                ]
-
-    # ------------------------------------------------------
-    # 3. Partie avant "–"
-    # ------------------------------------------------------
-
+    # Partie avant "–"
     if "–" in group:
 
         first_part = (
@@ -1081,42 +1061,15 @@ def find_category_id_fast(
 
         if first_part:
 
-            normalized_first = normalize(
-                first_part
+            category_id = category_mapping.get(
+                normalize(first_part)
             )
 
-            if (
-                normalized_first
-                in category_mapping
-            ):
-
-                return category_mapping[
-                    normalized_first
-                ]
-
-    # ------------------------------------------------------
-    # 4. Recherche par présence
-    #
-    # Exemple :
-    #
-    # groupe = "20"
-    #
-    # catégorie = "20 - METROLOGIE"
-    #
-    # Si la clé exacte n'a pas été créée,
-    # on cherche dans les clés.
-    # ------------------------------------------------------
-
-    for key, category_id in category_mapping.items():
-
-        if (
-            normalized_group
-            and normalized_group in key
-        ):
-
-            return category_id
+            if category_id is not None:
+                return category_id
 
     return None
+
 
 
 # ==========================================================
@@ -1552,8 +1505,24 @@ def process_odoo(
     # BOUCLE PRINCIPALE
     # ======================================================
     start_main_loop = time.perf_counter()
-    
     category_search_count = 0
+
+    # ======================================================
+    # PREMIERE LIGNE VIDE DISPONIBLE POUR LES CREATIONS
+    # On la cherche UNE SEULE FOIS.
+    # ======================================================
+    
+    next_empty_row = odoo_header_row + 1
+    
+    while ws.cell(
+        row=next_empty_row,
+        column=reference_col,
+    ).value not in (None, ""):
+    
+        next_empty_row += 1
+
+    template_row = odoo_header_row + 1
+    max_odoo_col = ws.max_column
 
     for index, row_values in enumerate(
         h_ws.iter_rows(
@@ -1641,42 +1610,10 @@ def process_odoo(
             updated += 1
 
         else:
-            # ==================================================
-            # RECHERCHE DU PREMIER EMPLACEMENT VIDE
-            # DANS LA COLONNE "REFERENCE"
-            # ==================================================
+            target_row = next_empty_row
+            next_empty_row += 1
         
-            reference_col = odoo_columns[
-                odoo_reference_column
-            ]
-        
-            target_row = odoo_header_row + 1
-        
-            while ws.cell(
-                row=target_row,
-                column=reference_col,
-            ).value not in (None, ""):
-        
-                target_row += 1
-        
-            # ==================================================
-            # COPIE DU STYLE DE LA LIGNE PRECEDENTE
-            # ==================================================
-        
-            if target_row > odoo_header_row + 1:
-        
-                template_row = target_row - 1
-        
-                copy_row_style(
-                    ws,
-                    template_row,
-                    target_row,
-                    ws.max_column,
-                )
-        
-            # ==================================================
-            # ENREGISTREMENT DE LA NOUVELLE REFERENCE
-            # ==================================================
+          
         
             reference_index[
                 normalized_ref
@@ -1730,13 +1667,13 @@ def process_odoo(
         # PRIX
         # ==================================================
 
-        if is_sav(reference):
+        reference_is_sav = reference.endswith("_SAV")
 
+        if reference_is_sav:
             price = sav
-
         else:
-
             price = ppc
+
 
         # ==================================================
         # CATEGORIE
@@ -1745,17 +1682,13 @@ def process_odoo(
         # Aucun fichier n'est rouvert.
         # ==================================================
 
-        start_cat = time.perf_counter()
-
-        category_id = (
-            find_category_id_fast(
-                groupe_produit=groupe,
-                category_mapping=category_mapping,
-            )
+        category_id = find_category_id_fast(
+            groupe,
+            category_mapping,
         )
         
-
         category_search_count += 1
+
 
         if category_id is not None:
 
@@ -1796,7 +1729,7 @@ def process_odoo(
         # Produit normal → I + référence
         # ==================================================
         
-        if is_sav(reference):
+        if reference_is_sav:
         
             ws.cell(
                 row=target_row,
