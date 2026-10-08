@@ -1254,11 +1254,6 @@ def process_odoo(
     - start_heidenhain
     )
     
-    st.info(
-        f"⏱️ Chargement Heidenhain : "
-        f"{time_heidenhain_load:.2f} secondes"
-    )
-
 
     # ======================================================
     # 3. COLONNES HEIDENHAIN
@@ -1339,12 +1334,6 @@ def process_odoo(
     - start_odoo_load
     )
     
-    st.info(
-        f"⏱️ Chargement Odoo : "
-        f"{time_odoo_load:.2f} secondes"
-    )
-
-
     # ======================================================
     # 5. COLONNES ODOO
     # ======================================================
@@ -1435,12 +1424,7 @@ def process_odoo(
     time.perf_counter()
     - start_index
     )
-    
-    st.info(
-        f"⏱️ Création index Odoo : "
-        f"{time_index:.2f} secondes "
-        f"({len(reference_index):,} références)"
-    )
+
 
     progress.progress(
         40,
