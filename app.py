@@ -9,6 +9,14 @@
 # - Mise à jour / création des références Odoo
 # - Recherche catégorie optimisée en mémoire
 # - Compatible avec de gros fichiers
+#
+# AMELIORATIONS :
+# - Boutons verrouillés pendant les calculs
+# - Impossible de lancer deux fois le même traitement
+# - Affichage immédiat "Calcul en cours"
+# - Barre de progression visible
+# - Messages d'étapes en direct
+# - Déverrouillage automatique en cas d'erreur
 # ==========================================================
 
 import streamlit as st
@@ -39,8 +47,16 @@ st.title("📦 Préparation des prix HEIDENHAIN --> Odoo")
 DEFAULT_STATE = {
     "heidenhain_result": None,
     "heidenhain_stats": None,
+
     "odoo_result": None,
     "odoo_stats": None,
+
+    # ------------------------------------------------------
+    # VERROUS DE CALCUL
+    # ------------------------------------------------------
+
+    "heidenhain_processing": False,
+    "odoo_processing": False,
 }
 
 for key, value in DEFAULT_STATE.items():
@@ -91,7 +107,6 @@ DEFAULT_OUTPUT_COLUMNS = [
     "Prix (SAV)",
     "Prix HA",
 ]
-
 
 
 # ==========================================================
@@ -229,7 +244,6 @@ def find_columns(
 
     result = {}
 
-    # Une seule lecture de la ligne d'en-têtes
     headers = {}
 
     for cell in ws[header_row]:
@@ -282,7 +296,7 @@ def get_sheet_names(
 
 # ==========================================================
 # ETAPE 1
-# HEIDENHAIN
+# COPIE LIGNE HEIDENHAIN
 # ==========================================================
 
 def copy_heidenhain_row(
@@ -315,33 +329,33 @@ def copy_heidenhain_row(
             column=output_col,
         )
 
-        # Prix SAV :
-        # Prix HA :
-        # on récupère la valeur calculée
-        # et non la formule.
+        # --------------------------------------------------
+        # Prix SAV
+        # Prix HA
+        # --------------------------------------------------
 
         if column_name == "Prix (SAV)":
-        
+
             target_cell.value = (
-            values_ws.cell(
-            row=source_row,
-            column=source_col,
-            ).value
+                values_ws.cell(
+                    row=source_row,
+                    column=source_col,
+                ).value
             )
-        
+
         elif column_name == "Prix HA":
-        
+
             target_cell.value = (
-            values_ws.cell(
-            row=source_row,
-            column=source_col,
-            ).value
+                values_ws.cell(
+                    row=source_row,
+                    column=source_col,
+                ).value
             )
-        
+
         else:
-            
+
             target_cell.value = (
-            source_cell.value
+                source_cell.value
             )
 
         copy_style_safe(
@@ -368,6 +382,11 @@ def copy_heidenhain_row(
         ).value = new_id
 
 
+# ==========================================================
+# ETAPE 1
+# HEIDENHAIN
+# ==========================================================
+
 def process_heidenhain(
     uploaded_file,
     sheet_name,
@@ -376,6 +395,8 @@ def process_heidenhain(
     status_column,
     id_column,
     output_columns,
+    progress=None,
+    status_display=None,
 ):
 
     header_row = int(
@@ -397,6 +418,23 @@ def process_heidenhain(
 
         raise ValueError(
             "La colonne ID est obligatoire."
+        )
+
+    # ======================================================
+    # MESSAGE INITIAL
+    # ======================================================
+
+    if status_display is not None:
+
+        status_display.info(
+            "📂 Ouverture du fichier Heidenhain..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            2,
+            text="📂 Ouverture du fichier Heidenhain..."
         )
 
     # ======================================================
@@ -426,6 +464,19 @@ def process_heidenhain(
     source_ws = wb_formula[
         sheet_name
     ]
+
+    if status_display is not None:
+
+        status_display.info(
+            "📊 Lecture des valeurs calculées..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            5,
+            text="📊 Lecture des valeurs calculées..."
+        )
 
     # ======================================================
     # OUVERTURE VALEURS
@@ -487,29 +538,40 @@ def process_heidenhain(
     ]
 
     # ======================================================
-    # DERNIÈRE LIGNE RÉELLEMENT REMPLIE
-    # On s'arrête dès que la colonne ID est vide.
-    # Cela évite de traiter les milliers de lignes
-    # supplémentaires créées uniquement par la mise en forme Excel.
+    # DERNIERE LIGNE REELLEMENT REMPLIE
     # ======================================================
-    
+
+    if status_display is not None:
+
+        status_display.info(
+            "🔎 Recherche de la dernière ligne..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            8,
+            text="🔎 Recherche des lignes à traiter..."
+        )
+
     max_row = data_start_row - 1
-    
+
     for row in range(
         data_start_row,
         source_ws.max_row + 1,
     ):
-    
+
         id_value = source_ws.cell(
             row=row,
             column=id_col,
         ).value
-    
+
         if id_value in (None, ""):
+
             break
-    
+
         max_row = row
-    
+
     total_rows = max(
         0,
         max_row - data_start_row + 1,
@@ -518,6 +580,13 @@ def process_heidenhain(
     # ======================================================
     # NOUVEAU CLASSEUR
     # ======================================================
+
+    if status_display is not None:
+
+        status_display.info(
+            f"📄 Préparation du nouveau fichier "
+            f"({total_rows:,} lignes)..."
+        )
 
     output_wb = (
         openpyxl.Workbook()
@@ -598,10 +667,15 @@ def process_heidenhain(
 
     output_row = 2
 
-    progress = st.progress(
-        0,
-        text="Préparation Heidenhain...",
-    )
+    if progress is not None:
+
+        progress.progress(
+            10,
+            text=(
+                f"⚙️ Traitement Heidenhain : "
+                f"0 / {total_rows:,}"
+            ),
+        )
 
     for index, source_row in enumerate(
         range(
@@ -702,24 +776,47 @@ def process_heidenhain(
                         total_rows,
                     )
                 )
-                * 100
+                * 75
             )
 
-            progress.progress(
-                min(
-                    pct,
-                    100,
-                ),
-                text=(
-                    f"Heidenhain : "
-                    f"{index + 1:,} / "
-                    f"{total_rows:,}"
-                ),
-            )
+            pct = 10 + pct
+
+            if progress is not None:
+
+                progress.progress(
+                    min(
+                        pct,
+                        85,
+                    ),
+                    text=(
+                        f"⚙️ Heidenhain : "
+                        f"{index + 1:,} / "
+                        f"{total_rows:,}"
+                        f" | VG : {vg_count:,}"
+                        f" | PG : {pg_count:,}"
+                    ),
+                )
 
     # ======================================================
     # LIGNES SAV
     # ======================================================
+
+    if status_display is not None:
+
+        status_display.info(
+            f"➕ Création des lignes SAV "
+            f"({len(rows_to_create):,})..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            87,
+            text=(
+                f"➕ Création des lignes SAV : "
+                f"{len(rows_to_create):,}"
+            ),
+        )
 
     created_ids = []
 
@@ -753,6 +850,19 @@ def process_heidenhain(
     # ======================================================
     # LARGEURS
     # ======================================================
+
+    if status_display is not None:
+
+        status_display.info(
+            "📐 Mise en forme des colonnes..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            90,
+            text="📐 Mise en forme du fichier..."
+        )
 
     for output_col, column_name in enumerate(
         output_columns,
@@ -793,6 +903,19 @@ def process_heidenhain(
     # SAUVEGARDE
     # ======================================================
 
+    if status_display is not None:
+
+        status_display.info(
+            "💾 Création du fichier Excel..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            94,
+            text="💾 Création du fichier Excel..."
+        )
+
     result = BytesIO()
 
     output_wb.save(
@@ -823,6 +946,19 @@ def process_heidenhain(
         "created_ids": created_ids,
     }
 
+    if progress is not None:
+
+        progress.progress(
+            100,
+            text="✅ Étape 1 terminée",
+        )
+
+    if status_display is not None:
+
+        status_display.success(
+            "✅ Fichier Heidenhain créé avec succès."
+        )
+
     return data, stats
 
 
@@ -837,23 +973,6 @@ def load_category_mapping(
     category_id_col,
     category_search_col,
 ):
-
-    """
-    Charge UNE SEULE FOIS toutes les catégories.
-
-    Exemple :
-
-        Colonne B = 123
-        Colonne C = 20 - Métrologie
-
-    On crée plusieurs clés de recherche :
-
-        "20 - METROLOGIE"
-        "20"
-
-    afin de pouvoir retrouver rapidement
-    la catégorie.
-    """
 
     category_file.seek(0)
 
@@ -890,17 +1009,13 @@ def load_category_mapping(
         values_only=True,
     ):
 
-        # --------------------------------------------------
-        # Protection si les colonnes demandées
-        # dépassent la longueur de la ligne
-        # --------------------------------------------------
-
         max_index = max(
             category_id_col,
             category_search_col,
         ) - 1
 
         if max_index >= len(row):
+
             continue
 
         category_id = row[
@@ -915,6 +1030,7 @@ def load_category_mapping(
             category_id is None
             or category_text is None
         ):
+
             continue
 
         category_id = str(
@@ -929,6 +1045,7 @@ def load_category_mapping(
             not category_id
             or not category_text
         ):
+
             continue
 
         rows_loaded += 1
@@ -937,24 +1054,11 @@ def load_category_mapping(
             category_text
         )
 
-        # --------------------------------------------------
-        # Clé texte complète
-        # --------------------------------------------------
-
         if normalized_text not in mapping:
 
             mapping[
                 normalized_text
             ] = category_id
-
-        # --------------------------------------------------
-        # Clé avant "-"
-        #
-        # Exemple :
-        # 20 - Métrologie
-        #
-        # => 20
-        # --------------------------------------------------
 
         if "-" in category_text:
 
@@ -975,10 +1079,6 @@ def load_category_mapping(
                     mapping[
                         normalized_first
                     ] = category_id
-
-        # --------------------------------------------------
-        # Clé avant "–" (tiret long)
-        # --------------------------------------------------
 
         if "–" in category_text:
 
@@ -1015,24 +1115,29 @@ def find_category_id_fast(
 ):
 
     if groupe_produit is None:
+
         return None
 
-    group = str(groupe_produit).strip()
+    group = str(
+        groupe_produit
+    ).strip()
 
     if not group:
+
         return None
 
-    normalized_group = normalize(group)
+    normalized_group = normalize(
+        group
+    )
 
-    # Correspondance exacte
     category_id = category_mapping.get(
         normalized_group
     )
 
     if category_id is not None:
+
         return category_id
 
-    # Partie avant "-"
     if "-" in group:
 
         first_part = (
@@ -1048,9 +1153,9 @@ def find_category_id_fast(
             )
 
             if category_id is not None:
+
                 return category_id
 
-    # Partie avant "–"
     if "–" in group:
 
         first_part = (
@@ -1066,15 +1171,15 @@ def find_category_id_fast(
             )
 
             if category_id is not None:
+
                 return category_id
 
     return None
 
 
-
 # ==========================================================
 # ETAPE 2
-# TRAITEMENT ODOO OPTIMISE
+# TRAITEMENT ODOO
 # ==========================================================
 
 def process_odoo(
@@ -1114,31 +1219,41 @@ def process_odoo(
     odoo_name,
     odoo_brand_description,
     odoo_prixHA,
+
+    progress=None,
+    status_display=None,
 ):
+
     # ======================================================
-    # CHRONOMETRES EN DIRECT
+    # CHRONOMETRES
     # ======================================================
-    
+
+    start_total = time.perf_counter()
+
     timer_categories = st.empty()
     timer_heidenhain = st.empty()
     timer_odoo = st.empty()
     timer_index = st.empty()
     timer_main = st.empty()
 
-    start_total = time.perf_counter()
+    # ======================================================
+    # 1. CATEGORIES
+    # ======================================================
 
-    
-    # CHRONOMETRAGE
     start_categories = time.perf_counter()
 
-    # ======================================================
-    # 1. CHARGEMENT DES CATEGORIES
-    # ======================================================
+    if status_display is not None:
 
-    progress = st.progress(
-        0,
-        text="Étape 2 — Chargement des catégories...",
-    )
+        status_display.info(
+            "📂 Chargement des catégories..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            2,
+            text="📂 Chargement des catégories..."
+        )
 
     category_mapping, category_rows = (
         load_category_mapping(
@@ -1154,24 +1269,38 @@ def process_odoo(
     )
 
     time_categories = (
-    time.perf_counter()
-    - start_categories
+        time.perf_counter()
+        - start_categories
     )
-    
 
-    progress.progress(
-        10,
-        text=(
-            "Catégories chargées : "
-            f"{category_rows:,}"
-        ),
-    )
+    if progress is not None:
+
+        progress.progress(
+            10,
+            text=(
+                f"📂 Catégories chargées : "
+                f"{category_rows:,}"
+            ),
+        )
 
     # ======================================================
-    # 2. OUVERTURE FICHIER HEIDENHAIN
+    # 2. HEIDENHAIN
     # ======================================================
 
     start_heidenhain = time.perf_counter()
+
+    if status_display is not None:
+
+        status_display.info(
+            "📘 Chargement du fichier Heidenhain..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            15,
+            text="📘 Chargement du fichier Heidenhain..."
+        )
 
     heidenhain_file.seek(0)
 
@@ -1201,10 +1330,9 @@ def process_odoo(
     ]
 
     time_heidenhain_load = (
-    time.perf_counter()
-    - start_heidenhain
+        time.perf_counter()
+        - start_heidenhain
     )
-    
 
     # ======================================================
     # 3. COLONNES HEIDENHAIN
@@ -1243,15 +1371,31 @@ def process_odoo(
             + ", ".join(missing_h)
         )
 
-    progress.progress(
-        20,
-        text="Fichier Heidenhain chargé...",
-    )
+    if progress is not None:
+
+        progress.progress(
+            20,
+            text="📘 Fichier Heidenhain chargé..."
+        )
 
     # ======================================================
-    # 4. OUVERTURE ODOO
+    # 4. ODOO
     # ======================================================
+
     start_odoo_load = time.perf_counter()
+
+    if status_display is not None:
+
+        status_display.info(
+            "📗 Chargement du fichier Odoo..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            25,
+            text="📗 Chargement du fichier Odoo..."
+        )
 
     odoo_file.seek(0)
 
@@ -1281,13 +1425,19 @@ def process_odoo(
     ]
 
     time_odoo_load = (
-    time.perf_counter()
-    - start_odoo_load
+        time.perf_counter()
+        - start_odoo_load
     )
-    
+
     # ======================================================
     # 5. COLONNES ODOO
     # ======================================================
+
+    if status_display is not None:
+
+        status_display.info(
+            "🔎 Recherche des colonnes Odoo..."
+        )
 
     odoo_column_names = [
         odoo_reference_column,
@@ -1328,24 +1478,37 @@ def process_odoo(
             + ", ".join(missing_odoo)
         )
 
-    progress.progress(
-        30,
-        text="Fichier Odoo chargé...",
-    )
+    if progress is not None:
+
+        progress.progress(
+            30,
+            text="📗 Fichier Odoo chargé..."
+        )
 
     # ======================================================
-    # 6. INDEX DES REFERENCES ODOO
-    #
-    # Une seule lecture du fichier.
+    # 6. INDEX ODOO
     # ======================================================
+
     start_index = time.perf_counter()
+
+    if status_display is not None:
+
+        status_display.info(
+            "🔎 Création de l'index des références Odoo..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            35,
+            text="🔎 Indexation des références Odoo..."
+        )
 
     reference_index = {}
 
     reference_col = odoo_columns[
         odoo_reference_column
     ]
-
 
     max_odoo_row = ws.max_row
 
@@ -1370,23 +1533,24 @@ def process_odoo(
                 reference_index[
                     ref
                 ] = row
-    
+
     time_index = (
-    time.perf_counter()
-    - start_index
+        time.perf_counter()
+        - start_index
     )
 
+    if progress is not None:
 
-    progress.progress(
-        40,
-        text=(
-            "Index Odoo créé : "
-            f"{len(reference_index):,} références"
-        ),
-    )
+        progress.progress(
+            40,
+            text=(
+                "🔎 Index Odoo créé : "
+                f"{len(reference_index):,} références"
+            ),
+        )
 
     # ======================================================
-    # 7. PREPARATION DES COLONNES
+    # 7. COLONNES
     # ======================================================
 
     col_ref = odoo_columns[
@@ -1428,12 +1592,10 @@ def process_odoo(
     col_category = odoo_columns[
         odoo_category_column
     ]
-    
+
     col_prixHA = odoo_columns[
-    odoo_prixHA
+        odoo_prixHA
     ]
-
-
 
     # ======================================================
     # 8. STATISTIQUES
@@ -1461,17 +1623,25 @@ def process_odoo(
         + 1,
     )
 
-    progress.progress(
-        45,
-        text=(
-            f"Traitement de "
-            f"{total_h_rows:,} lignes..."
-        ),
-    )
+    if status_display is not None:
+
+        status_display.info(
+            f"⚙️ Traitement de "
+            f"{total_h_rows:,} lignes Heidenhain..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            45,
+            text=(
+                f"⚙️ Traitement : "
+                f"0 / {total_h_rows:,}"
+            ),
+        )
 
     # ======================================================
-    # OPTIMISATION :
-    # références de colonnes stockées localement
+    # COLONNES HEIDENHAIN
     # ======================================================
 
     h_id_col = h_columns[
@@ -1495,31 +1665,25 @@ def process_odoo(
     ]
 
     h_prixHA_col = h_columns[
-    heidenhain_prixHA
+        heidenhain_prixHA
     ]
-
 
     # ======================================================
     # BOUCLE PRINCIPALE
     # ======================================================
+
     start_main_loop = time.perf_counter()
 
-    # ======================================================
-    # PREMIERE LIGNE VIDE DISPONIBLE POUR LES CREATIONS
-    # On la cherche UNE SEULE FOIS.
-    # ======================================================
-    
-    next_empty_row = odoo_header_row + 1
-    
+    next_empty_row = (
+        int(odoo_header_row) + 1
+    )
+
     while ws.cell(
         row=next_empty_row,
         column=reference_col,
     ).value not in (None, ""):
-    
-        next_empty_row += 1
 
-    template_row = odoo_header_row + 1
-    max_odoo_col = ws.max_column
+        next_empty_row += 1
 
     for index, row_values in enumerate(
         h_ws.iter_rows(
@@ -1527,22 +1691,26 @@ def process_odoo(
             values_only=True,
         )
     ):
-    
-        reference = row_values[h_id_col - 1]
-    
-        if reference in (None, ""):
-            break
-
-
-        # --------------------------------------------------
-        # Lecture rapide des valeurs
-        # --------------------------------------------------
 
         try:
 
             reference = row_values[
                 h_id_col - 1
             ]
+
+        except IndexError:
+
+            continue
+
+        if reference in (None, ""):
+
+            break
+
+        # --------------------------------------------------
+        # Lecture rapide
+        # --------------------------------------------------
+
+        try:
 
             status = row_values[
                 h_status_col - 1
@@ -1561,23 +1729,16 @@ def process_odoo(
             ]
 
             prixHA = row_values[
-            h_prixHA_col - 1
+                h_prixHA_col - 1
             ]
-
 
         except IndexError:
 
             continue
 
         # --------------------------------------------------
-        # Référence
+        # Reference
         # --------------------------------------------------
-
-        if reference is None:
-
-            empty_references += 1
-
-            continue
 
         reference = str(
             reference
@@ -1599,10 +1760,7 @@ def process_odoo(
         # RECHERCHE ODOO
         # ==================================================
 
-        if (
-            normalized_ref
-            in reference_index
-        ):
+        if normalized_ref in reference_index:
 
             target_row = (
                 reference_index[
@@ -1613,83 +1771,92 @@ def process_odoo(
             updated += 1
 
         else:
+
             target_row = next_empty_row
+
             next_empty_row += 1
-        
-          
-        
+
             reference_index[
                 normalized_ref
             ] = target_row
-        
+
             created += 1
 
+        # ==================================================
+        # DESCRIPTION
+        # ==================================================
 
-        # ==================================================
-        # NOM
-        # Depuis Description Heidenhain
-        # Écrit uniquement si la cellule Odoo est vide
-        # ==================================================
-        
         description = row_values[
-            h_columns[heidenhain_description] - 1
+            h_columns[
+                heidenhain_description
+            ] - 1
         ]
-        
+
         name_cell = ws.cell(
             row=target_row,
-            column=odoo_columns[odoo_name],
+            column=odoo_columns[
+                odoo_name
+            ],
         )
-        
-        if name_cell.value in (None, ""):
-        
+
+        if name_cell.value in (
+            None,
+            "",
+        ):
+
             name_cell.value = description
-        
-        
+
         # ==================================================
-        # MARQUE / DESCRIPTION
-        # Depuis Marque Heidenhain
-        # Écrit uniquement si la cellule Odoo est vide
+        # MARQUE
         # ==================================================
-        
+
         marque = row_values[
-            h_columns[heidenhain_marque] - 1
+            h_columns[
+                heidenhain_marque
+            ] - 1
         ]
-        
+
         brand_cell = ws.cell(
             row=target_row,
-            column=odoo_columns[odoo_brand_description],
+            column=odoo_columns[
+                odoo_brand_description
+            ],
         )
-        
-        if brand_cell.value in (None, ""):
-        
+
+        if brand_cell.value in (
+            None,
+            "",
+        ):
+
             brand_cell.value = marque
 
-
-        
         # ==================================================
         # PRIX
         # ==================================================
 
-        reference_is_sav = normalized_ref.endswith("_SAV")
+        reference_is_sav = (
+            normalized_ref.endswith("_SAV")
+        )
 
         if reference_is_sav:
-            price = sav
-        else:
-            price = ppc
 
+            price = sav
+
+        else:
+
+            price = ppc
 
         # ==================================================
         # CATEGORIE
-        #
-        # Recherche en mémoire.
-        # Aucun fichier n'est rouvert.
         # ==================================================
 
-        category_id = find_category_id_fast(
-            groupe,
-            category_mapping,
+        category_id = (
+            find_category_id_fast(
+                groupe,
+                category_mapping,
+            )
         )
-    
+
         if category_id is not None:
 
             category_found += 1
@@ -1718,31 +1885,33 @@ def process_odoo(
         ).value = price
 
         ws.cell(
-        row=target_row,
-        column=col_prixHA,
+            row=target_row,
+            column=col_prixHA,
         ).value = prixHA
-
 
         # ==================================================
         # CODE-BARRES
-        # Produit SAV → vide
-        # Produit normal → I + référence
         # ==================================================
-        
+
         if reference_is_sav:
-        
+
             ws.cell(
                 row=target_row,
                 column=col_barcode,
             ).value = ""
-        
+
         else:
-        
+
             ws.cell(
                 row=target_row,
                 column=col_barcode,
-            ).value = f"I {reference}"
+            ).value = (
+                f"I {reference}"
+            )
 
+        # ==================================================
+        # AUTRES CHAMPS
+        # ==================================================
 
         ws.cell(
             row=target_row,
@@ -1800,66 +1969,78 @@ def process_odoo(
                 * 45
             )
 
-            progress.progress(
-                min(
-                    pct,
-                    90,
-                ),
-                text=(
-                    f"Odoo : "
-                    f"{index + 1:,} / "
-                    f"{total_h_rows:,} "
-                    f"| Mise à jour : "
-                    f"{updated:,} "
-                    f"| Création : "
-                    f"{created:,} "
-                    f"| Catégories OK : "
-                    f"{category_found:,}"
-                ),
+            progress_value = min(
+                pct,
+                90,
             )
 
-        # ==============================================
-        # AFFICHAGE EN DIRECT
-        # ==============================================
-    
-        if index % 10 == 0:
+            if progress is not None:
+
+                progress.progress(
+                    progress_value,
+                    text=(
+                        f"⚙️ Odoo : "
+                        f"{index + 1:,} / "
+                        f"{total_h_rows:,}"
+                        f" | Mise à jour : "
+                        f"{updated:,}"
+                        f" | Création : "
+                        f"{created:,}"
+                        f" | Catégories : "
+                        f"{category_found:,}"
+                    ),
+                )
+
+        # ==================================================
+        # INFOS TEMPS
+        # ==================================================
+
+        if index % 100 == 0:
+
             now = time.perf_counter()
 
             timer_categories.info(
                 f"⏱️ Catégories : "
                 f"{time_categories:.2f} s"
             )
-            
+
             timer_heidenhain.info(
                 f"⏱️ Chargement Heidenhain : "
                 f"{time_heidenhain_load:.2f} s"
             )
-            
+
             timer_odoo.info(
                 f"⏱️ Chargement Odoo : "
                 f"{time_odoo_load:.2f} s"
             )
-            
+
             timer_index.info(
                 f"⏱️ Index Odoo : "
                 f"{time_index:.2f} s "
                 f"({len(reference_index):,} références)"
             )
-            
+
             timer_main.info(
                 f"⏱️ Boucle principale : "
-                f"{time.perf_counter() - start_main_loop:.2f} s"
+                f"{now - start_main_loop:.2f} s"
             )
-        
 
     # ======================================================
-    # 10. SAUVEGARDE
+    # SAUVEGARDE
     # ======================================================
 
-    progress.progress(
-        92,
-        text="Création du fichier Excel...",
-    )
+    if status_display is not None:
+
+        status_display.info(
+            "💾 Création du fichier Excel final..."
+        )
+
+    if progress is not None:
+
+        progress.progress(
+            92,
+            text="💾 Création du fichier Excel..."
+        )
 
     output = BytesIO()
 
@@ -1878,9 +2059,26 @@ def process_odoo(
     wb_o.close()
     wb_h.close()
 
-    progress.progress(
-        100,
-        text="✅ Étape 2 terminée",
+    total_time = (
+        time.perf_counter()
+        - start_total
+    )
+
+    if progress is not None:
+
+        progress.progress(
+            100,
+            text="✅ Étape 2 terminée",
+        )
+
+    if status_display is not None:
+
+        status_display.success(
+            "✅ Fichier Odoo préparé avec succès."
+        )
+
+    timer_main.success(
+        f"⏱️ Temps total : {total_time:.2f} s"
     )
 
     # ======================================================
@@ -1935,7 +2133,7 @@ if "ID" not in heidenhain_output_columns:
     st.sidebar.error(
         "⚠️ La colonne ID est obligatoire."
     )
-    
+
 st.sidebar.subheader(
     "📘 Fichier Heidenhain"
 )
@@ -2000,7 +2198,6 @@ odoo_brand_description = st.sidebar.text_input(
     "Marque",
 )
 
-
 odoo_sales_status = st.sidebar.text_input(
     "Sales Status",
     "Sales Status",
@@ -2050,7 +2247,6 @@ odoo_prixHA = st.sidebar.text_input(
     "Fournisseurs/Prix",
     "Fournisseurs/Prix",
 )
-
 
 
 # ==========================================================
@@ -2174,12 +2370,34 @@ Le traitement va :
         """
     )
 
-    if st.button(
-        "🚀 Créer le fichier Heidenhain",
-        type="primary",
-        use_container_width=True,
-        key="create_heidenhain",
-    ):
+    # ======================================================
+    # CALCUL EN COURS
+    # ======================================================
+
+    if st.session_state.heidenhain_processing:
+
+        # --------------------------------------------------
+        # BOUTON VERROUILLE
+        # --------------------------------------------------
+
+        st.button(
+            "⏳ Calcul Heidenhain en cours...",
+            disabled=True,
+            use_container_width=True,
+            key="create_heidenhain_locked",
+        )
+
+        st.warning(
+            "⏳ **Le calcul Heidenhain est en cours.** "
+            "Veuillez patienter et ne pas relancer le traitement."
+        )
+
+        progress_heidenhain = st.progress(
+            0,
+            text="Initialisation du calcul Heidenhain..."
+        )
+
+        status_heidenhain = st.empty()
 
         try:
 
@@ -2197,8 +2415,14 @@ Le traitement va :
                     output_columns=(
                         heidenhain_output_columns
                     ),
+                    progress=progress_heidenhain,
+                    status_display=status_heidenhain,
                 )
             )
+
+            # --------------------------------------------------
+            # SAUVEGARDE
+            # --------------------------------------------------
 
             st.session_state.heidenhain_result = (
                 result
@@ -2208,17 +2432,57 @@ Le traitement va :
                 stats
             )
 
+            # --------------------------------------------------
+            # DEVERROUILLAGE
+            # --------------------------------------------------
+
+            st.session_state.heidenhain_processing = False
+
             st.success(
                 "✅ Fichier Heidenhain créé."
             )
 
+            st.rerun()
+
         except Exception as e:
+
+            # --------------------------------------------------
+            # TOUJOURS DEVERROUILLER EN CAS D'ERREUR
+            # --------------------------------------------------
+
+            st.session_state.heidenhain_processing = False
 
             st.error(
                 f"❌ Erreur : {e}"
             )
 
             st.exception(e)
+
+    # ======================================================
+    # BOUTON NORMAL
+    # ======================================================
+
+    else:
+
+        if st.button(
+            "🚀 Créer le fichier Heidenhain",
+            type="primary",
+            use_container_width=True,
+            key="create_heidenhain",
+        ):
+
+            # --------------------------------------------------
+            # VERROUILLAGE
+            # --------------------------------------------------
+
+            st.session_state.heidenhain_processing = True
+
+            # --------------------------------------------------
+            # FORCE STREAMLIT A RAFRAICHIR L'INTERFACE
+            # AVANT LE GROS CALCUL
+            # --------------------------------------------------
+
+            st.rerun()
 
 
 # ==========================================================
@@ -2271,89 +2535,214 @@ if (
 ):
 
     st.info(
-    "Crée d'abord le fichier Heidenhain à l'étape 1, "
-    "puis importe les fichiers Odoo et Catégorie."
-)
-
+        "Crée d'abord le fichier Heidenhain à l'étape 1, "
+        "puis importe les fichiers Odoo et Catégorie."
+    )
 
 else:
 
     st.markdown(
         """
-        Le traitement va parcourir le fichier Heidenhain
-        et mettre à jour ou créer les références dans Odoo.
+Le traitement va parcourir le fichier Heidenhain
+et mettre à jour ou créer les références dans Odoo.
 
-        **Règles appliquées :**
+**Règles appliquées :**
 
-        - Référence existante → mise à jour.
-        - Référence absente → création d'une nouvelle ligne.
-        - Prix normal → **Prix (PPC)**.
-        - Référence `_SAV` → **Prix (SAV)**.
-        - Code-barres → `I ` + référence.
-        - Fournisseur → `HEIDENHAIN FRANCE`.
-        - Peut être acheté → `VRAI`.
-        - Peut être vendu → `VRAI`.
-        - Type de produit → `Consommable`.
-        - Politique de facturation → `Quantités livrées`.
-        - Catégorie → recherche dans le fichier Catégorie de produit.
+- Référence existante → mise à jour.
+- Référence absente → création d'une nouvelle ligne.
+- Prix normal → **Prix (PPC)**.
+- Référence `_SAV` → **Prix (SAV)**.
+- Code-barres → `I ` + référence.
+- Fournisseur → `HEIDENHAIN FRANCE`.
+- Peut être acheté → `VRAI`.
+- Peut être vendu → `VRAI`.
+- Type de produit → `Consommable`.
+- Politique de facturation → `Quantités livrées`.
+- Catégorie → recherche dans le fichier Catégorie de produit.
         """
     )
 
-    if st.button(
-        "🚀 Préparer le fichier Odoo",
-        type="primary",
-        use_container_width=True,
-        key="prepare_odoo",
-    ):
+    # ======================================================
+    # CALCUL EN COURS
+    # ======================================================
 
-        try:
-            # ==================================================
-            # UTILISER LE FICHIER HEIDENHAIN PREPARE
-            # PAR L'ETAPE 1
-            # ==================================================
-            prepared_heidenhain_file = BytesIO(st.session_state.heidenhain_result)
-            
-            result, stats = process_odoo(
-            heidenhain_file=prepared_heidenhain_file,
-            odoo_file=odoo_file,
-            category_file=category_file,
-        
-            heidenhain_sheet=heidenhain_sheet,
-            odoo_sheet=odoo_sheet,
-            category_sheet=category_sheet,
-        
-            heidenhain_header_row=int(heidenhain_header_row),
-            odoo_header_row=int(odoo_header_row),
-        
-            category_id_col=int(category_id_col),
-            category_search_col=int(category_search_col),
-        
-            heidenhain_id_column=id_column,
-            heidenhain_status_column=status_column,
-            heidenhain_group_column=group_column,
-            heidenhain_ppc_column=ppc_column,
-            heidenhain_sav_column=sav_column,
-        
-            heidenhain_description="Description",
-            heidenhain_marque="Marque",
-            heidenhain_prixHA=heidenhain_prixHA,
-        
-            odoo_reference_column=odoo_reference,
-            odoo_sales_status_column=odoo_sales_status,
-            odoo_price_column=odoo_price,
-            odoo_barcode_column=odoo_barcode,
-            odoo_supplier_column=odoo_supplier,
-            odoo_purchase_column=odoo_purchase,
-            odoo_sale_column=odoo_sale,
-            odoo_type_column=odoo_type,
-            odoo_invoice_policy_column=odoo_invoice_policy,
-            odoo_category_column=odoo_category,
-        
-            odoo_name=odoo_name,
-            odoo_brand_description=odoo_brand_description,
-            odoo_prixHA=odoo_prixHA,
+    if st.session_state.odoo_processing:
+
+        # --------------------------------------------------
+        # BOUTON VERROUILLE
+        # --------------------------------------------------
+
+        st.button(
+            "⏳ Calcul Odoo en cours...",
+            disabled=True,
+            use_container_width=True,
+            key="prepare_odoo_locked",
         )
 
+        st.warning(
+            "⏳ **La préparation Odoo est en cours.** "
+            "Veuillez patienter et ne pas relancer le traitement."
+        )
+
+        progress_odoo = st.progress(
+            0,
+            text="Initialisation du traitement Odoo..."
+        )
+
+        status_odoo = st.empty()
+
+        try:
+
+            # ==================================================
+            # FICHIER HEIDENHAIN PREPARE
+            # ==================================================
+
+            prepared_heidenhain_file = BytesIO(
+                st.session_state.heidenhain_result
+            )
+
+            # ==================================================
+            # TRAITEMENT
+            # ==================================================
+
+            result, stats = process_odoo(
+
+                heidenhain_file=(
+                    prepared_heidenhain_file
+                ),
+
+                odoo_file=(
+                    odoo_file
+                ),
+
+                category_file=(
+                    category_file
+                ),
+
+                heidenhain_sheet=(
+                    heidenhain_sheet
+                ),
+
+                odoo_sheet=(
+                    odoo_sheet
+                ),
+
+                category_sheet=(
+                    category_sheet
+                ),
+
+                heidenhain_header_row=int(
+                    heidenhain_header_row
+                ),
+
+                odoo_header_row=int(
+                    odoo_header_row
+                ),
+
+                category_id_col=int(
+                    category_id_col
+                ),
+
+                category_search_col=int(
+                    category_search_col
+                ),
+
+                heidenhain_id_column=(
+                    id_column
+                ),
+
+                heidenhain_status_column=(
+                    status_column
+                ),
+
+                heidenhain_group_column=(
+                    group_column
+                ),
+
+                heidenhain_ppc_column=(
+                    ppc_column
+                ),
+
+                heidenhain_sav_column=(
+                    sav_column
+                ),
+
+                heidenhain_description=(
+                    "Description"
+                ),
+
+                heidenhain_marque=(
+                    "Marque"
+                ),
+
+                heidenhain_prixHA=(
+                    heidenhain_prixHA
+                ),
+
+                odoo_reference_column=(
+                    odoo_reference
+                ),
+
+                odoo_sales_status_column=(
+                    odoo_sales_status
+                ),
+
+                odoo_price_column=(
+                    odoo_price
+                ),
+
+                odoo_barcode_column=(
+                    odoo_barcode
+                ),
+
+                odoo_supplier_column=(
+                    odoo_supplier
+                ),
+
+                odoo_purchase_column=(
+                    odoo_purchase
+                ),
+
+                odoo_sale_column=(
+                    odoo_sale
+                ),
+
+                odoo_type_column=(
+                    odoo_type
+                ),
+
+                odoo_invoice_policy_column=(
+                    odoo_invoice_policy
+                ),
+
+                odoo_category_column=(
+                    odoo_category
+                ),
+
+                odoo_name=(
+                    odoo_name
+                ),
+
+                odoo_brand_description=(
+                    odoo_brand_description
+                ),
+
+                odoo_prixHA=(
+                    odoo_prixHA
+                ),
+
+                progress=(
+                    progress_odoo
+                ),
+
+                status_display=(
+                    status_odoo
+                ),
+            )
+
+            # ==================================================
+            # SAUVEGARDE
+            # ==================================================
 
             st.session_state.odoo_result = (
                 result
@@ -2363,11 +2752,25 @@ else:
                 stats
             )
 
+            # ==================================================
+            # DEVERROUILLAGE
+            # ==================================================
+
+            st.session_state.odoo_processing = False
+
             st.success(
                 "✅ Fichier Odoo préparé avec succès."
             )
 
+            st.rerun()
+
         except Exception as e:
+
+            # --------------------------------------------------
+            # TOUJOURS DEVERROUILLER EN CAS D'ERREUR
+            # --------------------------------------------------
+
+            st.session_state.odoo_processing = False
 
             st.error(
                 "❌ Erreur pendant la préparation Odoo."
@@ -2375,13 +2778,38 @@ else:
 
             st.exception(e)
 
+    # ======================================================
+    # BOUTON NORMAL
+    # ======================================================
+
+    else:
+
+        if st.button(
+            "🚀 Préparer le fichier Odoo",
+            type="primary",
+            use_container_width=True,
+            key="prepare_odoo",
+        ):
+
+            # --------------------------------------------------
+            # VERROUILLAGE IMMEDIAT
+            # --------------------------------------------------
+
+            st.session_state.odoo_processing = True
+
+            # --------------------------------------------------
+            # RAFRAICHISSEMENT AVANT LE CALCUL
+            # --------------------------------------------------
+
+            st.rerun()
+
 
 # ==========================================================
 # RESULTAT ODOO
 # ==========================================================
 
 if st.session_state.odoo_result:
-    
+
     stats = (
         st.session_state.odoo_stats
     )
@@ -2477,11 +2905,3 @@ if st.session_state.odoo_result:
     st.success(
         "🎯 Le fichier Odoo final peut maintenant être téléchargé."
     )
-
-
-# ==========================================================
-# FIN
-# ==========================================================
-
-st.divider()
-
