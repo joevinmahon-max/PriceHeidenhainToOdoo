@@ -1906,49 +1906,49 @@ def process_odoo(
                 ),
             )
 
-            # ==============================================
-            # AFFICHAGE EN DIRECT
-            # ==============================================
-        
-            if index % 100 == 0:
-        
-                now = time.perf_counter()
-        
-                timer_categories.info(
-                    f"⏱️ Catégories : "
-                    f"{time_categories:.2f} s"
-                )
-        
-                timer_heidenhain.info(
-                    f"⏱️ Chargement Heidenhain : "
-                    f"{time_heidenhain_load:.2f} s"
-                )
-        
-                timer_odoo.info(
-                    f"⏱️ Chargement Odoo : "
-                    f"{time_odoo_load:.2f} s"
-                )
-        
-                timer_index.info(
-                    f"⏱️ Index Odoo : "
-                    f"{time_index:.2f} s"
-                )
-        
-                timer_main.info(
-                    f"⏱️ Boucle principale : "
-                    f"{now - start_main_loop:.2f} s"
-                )
-        
-                timer_category_search.info(
-                    f"⏱️ Recherche catégories : "
-                    f"{category_search_time:.2f} s "
-                    f"({category_search_count:,} recherches)"
-                )
-        
-                timer_total.info(
-                    f"⏱️ TOTAL : "
-                    f"{now - start_total:.2f} s"
-                )
+        # ==============================================
+        # AFFICHAGE EN DIRECT
+        # ==============================================
+    
+        if index % 10 == 0:
+    
+            now = time.perf_counter()
+    
+            timer_categories.info(
+                f"⏱️ Catégories : "
+                f"{time_categories:.2f} s"
+            )
+    
+            timer_heidenhain.info(
+                f"⏱️ Chargement Heidenhain : "
+                f"{time_heidenhain_load:.2f} s"
+            )
+    
+            timer_odoo.info(
+                f"⏱️ Chargement Odoo : "
+                f"{time_odoo_load:.2f} s"
+            )
+    
+            timer_index.info(
+                f"⏱️ Index Odoo : "
+                f"{time_index:.2f} s"
+            )
+    
+            timer_main.info(
+                f"⏱️ Boucle principale : "
+                f"{now - start_main_loop:.2f} s"
+            )
+    
+            timer_category_search.info(
+                f"⏱️ Recherche catégories : "
+                f"{category_search_time:.2f} s "
+                f"({category_search_count:,} recherches)"
+            )
+    
+            timer_total.info(
+                f"⏱️ TOTAL : "
+                f"{now - start_total:.2f} s"
+            )
 
     
 
