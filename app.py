@@ -1918,14 +1918,6 @@ def process_odoo(
                 f"{now - start_main_loop:.2f} s"
             )
         
-            timer_category_search.info(
-                f"⏱️ Recherche catégories : "
-                f"{now - start_category_search:.2f} s "
-                f"({category_search_count:,} recherches)"
-            )
-            
-
-    
 
     # ======================================================
     # 10. SAUVEGARDE
