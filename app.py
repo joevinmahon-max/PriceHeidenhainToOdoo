@@ -1124,8 +1124,6 @@ def process_odoo(
     timer_odoo = st.empty()
     timer_index = st.empty()
     timer_main = st.empty()
-    timer_category_search = st.empty()
-    timer_total = st.empty()
 
     start_total = time.perf_counter()
 
@@ -1505,7 +1503,6 @@ def process_odoo(
     # BOUCLE PRINCIPALE
     # ======================================================
     start_main_loop = time.perf_counter()
-    category_search_count = 0
 
     # ======================================================
     # PREMIERE LIGNE VIDE DISPONIBLE POUR LES CREATIONS
@@ -1524,12 +1521,13 @@ def process_odoo(
     template_row = odoo_header_row + 1
     max_odoo_col = ws.max_column
 
-    for index, row_values in enumerate(
-        h_ws.iter_rows(
-            min_row=heidenhain_data_start,
-            values_only=True,
-        )
-    ):
+    for index, row_values in enumerate(...):
+
+        reference = row_values[h_id_col - 1]
+    
+        if reference in (None, ""):
+            break
+
 
         # --------------------------------------------------
         # Lecture rapide des valeurs
@@ -1667,7 +1665,7 @@ def process_odoo(
         # PRIX
         # ==================================================
 
-        reference_is_sav = reference.endswith("_SAV")
+        reference_is_sav = normalized_ref.endswith("_SAV")
 
         if reference_is_sav:
             price = sav
@@ -1686,10 +1684,7 @@ def process_odoo(
             groupe,
             category_mapping,
         )
-        
-        category_search_count += 1
-
-
+    
         if category_id is not None:
 
             category_found += 1
@@ -2381,7 +2376,7 @@ else:
 # ==========================================================
 
 if st.session_state.odoo_result:
-
+    
     stats = (
         st.session_state.odoo_stats
     )
@@ -2474,6 +2469,10 @@ if st.session_state.odoo_result:
         key="download_odoo",
     )
 
+    st.success(
+        "🎯 Le fichier Odoo final peut maintenant être téléchargé."
+    )
+
 
 # ==========================================================
 # FIN
@@ -2481,6 +2480,3 @@ if st.session_state.odoo_result:
 
 st.divider()
 
-st.success(
-    "🎯 Le fichier Odoo final peut maintenant être téléchargé."
-)
