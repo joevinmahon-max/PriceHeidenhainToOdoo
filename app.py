@@ -1404,6 +1404,23 @@ def process_odoo(
     reference_col = odoo_columns[
         odoo_reference_column
     ]
+    st.write("DEBUG référence colonne :", reference_col)
+    st.write("DEBUG max_row Odoo :", ws.max_row)
+    st.write(
+        "DEBUG en-tête :",
+        ws.cell(
+            row=int(odoo_header_row),
+            column=reference_col
+        ).value
+    )
+    st.write(
+        "DEBUG première référence :",
+        ws.cell(
+            row=int(odoo_header_row) + 1,
+            column=reference_col
+        ).value
+    )
+
 
     max_odoo_row = ws.max_row
 
