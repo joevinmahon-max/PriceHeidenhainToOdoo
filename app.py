@@ -690,7 +690,7 @@ def process_heidenhain(
         output_row += 1
 
         if (
-            index % 5000 == 0
+            index % 10 == 0
             or index == total_rows - 1
         ):
 
@@ -1785,7 +1785,7 @@ def process_odoo(
         # ==================================================
 
         if (
-            index % 500 == 0
+            index % 10 == 0
             or index == total_h_rows - 1
         ):
 
