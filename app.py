@@ -1171,7 +1171,7 @@ def process_odoo(
     timer_odoo = st.empty()
     timer_index = st.empty()
     timer_main = st.empty()
-    timer_categories_search = st.empty()
+    timer_category_search = st.empty()
     
     # CHRONOMETRAGE
     start_categories = time.perf_counter()
