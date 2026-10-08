@@ -1406,20 +1406,21 @@ def process_odoo(
     ]
     st.write("DEBUG référence colonne :", reference_col)
     st.write("DEBUG max_row Odoo :", ws.max_row)
-    st.write(
-        "DEBUG en-tête :",
-        ws.cell(
-            row=int(odoo_header_row),
-            column=reference_col
+    
+    for r in range(
+        int(odoo_header_row) + 1,
+        ws.max_row + 1,
+    ):
+        valeur = ws.cell(
+            row=r,
+            column=reference_col,
         ).value
-    )
-    st.write(
-        "DEBUG première référence :",
-        ws.cell(
-            row=int(odoo_header_row) + 1,
-            column=reference_col
-        ).value
-    )
+    
+        if valeur not in (None, ""):
+            st.write(
+                f"DEBUG ligne {r} : {valeur}"
+            )
+
 
 
     max_odoo_row = ws.max_row
