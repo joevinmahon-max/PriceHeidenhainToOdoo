@@ -4,20 +4,21 @@
 #
 # VERSION COMPLETE
 #
-# - Toutes les colonnes Heidenhain détectées sont conservées
-# - Ordre original des colonnes Heidenhain conservé
 # - Détection automatique des colonnes Heidenhain
+# - Conservation par défaut de TOUTES les colonnes
+# - Conservation de l'ordre original Heidenhain
 # - Détection automatique des colonnes Odoo
-# - Détection automatique de l'ID Odoo
-# - ID Odoo conservé s'il existe
-# - Colonnes Odoo existantes conservées dans leur ordre
-# - Colonnes Odoo absentes ajoutées à l'emplacement choisi
+# - Détection automatique du champ id
+# - Conservation de l'ID Odoo existant
+# - Ajout des colonnes Odoo manquantes
+# - Demande de position UNIQUEMENT pour les colonnes absentes
 # - PPC / SAV conservés
 # - Prix HA conservé
 # - Catégories conservées
 # - Création des références absentes
 # - Mise à jour des références existantes
-# - Création des lignes _SAV
+# - Création automatique des codes-barres
+# - Création des lignes SAV
 # - Compatible gros fichiers
 # ==========================================================
 
@@ -72,142 +73,122 @@ STATUS_TO_DUPLICATE = {
 
 
 # ==========================================================
-# CORRESPONDANCES ODOO
+# CONFIGURATION DES CHAMPS ODOO
+# ==========================================================
+#
+# ODOO <- HEIDENHAIN
+#
+# source = colonne Heidenhain
+# fixed  = valeur fixe
+#
 # ==========================================================
 
 ODOO_FIELD_CONFIGURATION = {
 
-    # ------------------------------------------------------
-    # ID
-    # ------------------------------------------------------
     "id": {
         "label": "ID Odoo",
         "source": None,
         "fixed": None,
-        "special": "odoo_existing_id",
         "description": (
             "ID Odoo existant. "
-            "Conservé automatiquement s'il existe."
+            "Conservé automatiquement."
         ),
     },
 
-    # ------------------------------------------------------
-    # REFERENCE
-    # ------------------------------------------------------
     "default_code": {
         "label": "Référence interne",
         "source": "ID",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # NOM
-    # ------------------------------------------------------
     "name": {
         "label": "Nom",
         "source": "Description",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # MARQUE
-    # ------------------------------------------------------
     "x_studio_marque_1": {
         "label": "Marque",
         "source": "Marque",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # CATEGORIE
-    # ------------------------------------------------------
     "categ_id": {
         "label": "Catégorie",
         "source": "Groupe Produit",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # STATUT
-    # ------------------------------------------------------
     "x_studio_sales_status": {
         "label": "Sales Status",
         "source": "Statut",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # PRIX
-    # ------------------------------------------------------
     "list_price": {
         "label": "Prix de vente",
         "source": "__PRICE__",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # FOURNISSEUR
-    # ------------------------------------------------------
     "seller_ids/partner_id": {
         "label": "Fournisseur",
         "source": None,
         "fixed": "HEIDENHAIN FRANCE",
     },
 
-    # ------------------------------------------------------
-    # PRIX FOURNISSEUR
-    # ------------------------------------------------------
     "seller_ids/price": {
         "label": "Prix fournisseur",
         "source": "Prix HA",
         "fixed": None,
     },
 
-    # ------------------------------------------------------
-    # ACHAT
-    # ------------------------------------------------------
     "purchase_ok": {
         "label": "Peut être acheté",
         "source": None,
         "fixed": "VRAI",
     },
 
-    # ------------------------------------------------------
-    # VENTE
-    # ------------------------------------------------------
     "sale_ok": {
         "label": "Peut être vendu",
         "source": None,
         "fixed": "VRAI",
     },
 
-    # ------------------------------------------------------
-    # TYPE
-    # ------------------------------------------------------
     "type": {
         "label": "Type de produit",
         "source": None,
         "fixed": "Consommable",
     },
 
-    # ------------------------------------------------------
-    # FACTURATION
-    # ------------------------------------------------------
     "invoice_policy": {
         "label": "Politique de facturation",
         "source": None,
         "fixed": "Quantités livrées",
     },
 
-    # ------------------------------------------------------
-    # BARCODE
-    # ------------------------------------------------------
     "barcode": {
         "label": "Code-barres",
         "source": "__BARCODE__",
         "fixed": None,
     },
 }
+
+
+# ==========================================================
+# COLONNES HEIDENHAIN OBLIGATOIRES POUR L'ÉTAPE 2
+# ==========================================================
+
+REQUIRED_HEIDENHAIN_FOR_ODOO = [
+    "ID",
+    "Description",
+    "Marque",
+    "Statut",
+    "Groupe Produit",
+    "Prix (PPC)",
+    "Prix (SAV)",
+    "Prix HA",
+]
 
 
 # ==========================================================
@@ -266,7 +247,7 @@ def copy_style_safe(source, target):
 
 
 # ==========================================================
-# DETECTION DES EN-TETES
+# DETECTION DES EN-TÊTES
 # ==========================================================
 
 def get_headers(
@@ -275,8 +256,9 @@ def get_headers(
 ):
 
     result = []
-
     seen = set()
+
+    header_row = int(header_row)
 
     for cell in ws[header_row]:
 
@@ -302,6 +284,10 @@ def get_headers(
     return result
 
 
+# ==========================================================
+# RECHERCHE D'UNE COLONNE
+# ==========================================================
+
 def find_column(
     ws,
     header_row,
@@ -310,6 +296,8 @@ def find_column(
 
     wanted = normalize(header_name)
 
+    header_row = int(header_row)
+
     for cell in ws[header_row]:
 
         if normalize(cell.value) == wanted:
@@ -317,6 +305,10 @@ def find_column(
 
     return None
 
+
+# ==========================================================
+# RECHERCHE DE PLUSIEURS COLONNES
+# ==========================================================
 
 def find_columns(
     ws,
@@ -327,6 +319,8 @@ def find_columns(
     result = {}
 
     headers = {}
+
+    header_row = int(header_row)
 
     for cell in ws[header_row]:
 
@@ -345,32 +339,6 @@ def find_columns(
             result[name] = headers[normalized]
 
     return result
-
-
-def validate_required_columns(
-    detected_columns,
-    required_columns,
-    file_label,
-):
-
-    detected = {
-        normalize(x)
-        for x in detected_columns
-    }
-
-    missing = [
-        x
-        for x in required_columns
-        if normalize(x) not in detected
-    ]
-
-    if missing:
-
-        raise ValueError(
-            f"Colonnes nécessaires absentes du "
-            f"{file_label} : "
-            + ", ".join(missing)
-        )
 
 
 # ==========================================================
@@ -397,7 +365,6 @@ def detect_excel_headers(
     if sheet_name not in wb.sheetnames:
 
         wb.close()
-
         return []
 
     ws = wb[sheet_name]
@@ -413,7 +380,7 @@ def detect_excel_headers(
 
 
 # ==========================================================
-# FEUILLES
+# NOMS DES FEUILLES
 # ==========================================================
 
 def get_sheet_names(
@@ -439,8 +406,7 @@ def get_sheet_names(
 
 
 # ==========================================================
-# ETAPE 1
-# COPIE LIGNE HEIDENHAIN
+# COPIE D'UNE LIGNE HEIDENHAIN
 # ==========================================================
 
 def copy_heidenhain_row(
@@ -476,8 +442,14 @@ def copy_heidenhain_row(
             column=output_col,
         )
 
+        # ----------------------------------------------
+        # Pour les colonnes de prix :
+        # on prend la valeur calculée Excel.
+        # ----------------------------------------------
+
         if column_name in {
             "Prix (SAV)",
+            "Prix (PPC)",
             "Prix HA",
         }:
 
@@ -497,38 +469,31 @@ def copy_heidenhain_row(
             target_cell,
         )
 
+    # ----------------------------------------------
+    # ID SAV
+    # ----------------------------------------------
+
     if new_id is not None:
 
-        id_index = None
-
-        for index, column_name in enumerate(
-            output_columns
-        ):
-
-            if normalize(column_name) == "ID":
-
-                id_index = index + 1
-                break
-
-        if id_index is None:
+        if "ID" not in output_columns:
 
             raise ValueError(
                 "La colonne ID doit être présente "
-                "dans les colonnes Heidenhain."
+                "pour créer une ligne SAV."
             )
+
+        id_output_col = (
+            output_columns.index("ID") + 1
+        )
 
         output_ws.cell(
             row=output_row,
-            column=id_index,
+            column=id_output_col,
         ).value = new_id
 
 
 # ==========================================================
-# ETAPE 1
-# HEIDENHAIN
-#
-# IMPORTANT :
-# output_columns = TOUTES les colonnes détectées.
+# PROCESS HEIDENHAIN
 # ==========================================================
 
 def process_heidenhain(
@@ -546,20 +511,26 @@ def process_heidenhain(
     header_row = int(header_row)
     data_start_row = int(data_start_row)
 
+    # ------------------------------------------------------
+    # Sécurité
+    # ------------------------------------------------------
+
     if not output_columns:
 
         raise ValueError(
-            "Aucune colonne Heidenhain détectée."
+            "Aucune colonne Heidenhain n'a été sélectionnée."
         )
 
-    if not any(
-        normalize(x) == "ID"
-        for x in output_columns
-    ):
+    if id_column not in output_columns:
 
         raise ValueError(
-            "La colonne ID est obligatoire."
+            "La colonne ID doit être conservée "
+            "pour pouvoir créer les références SAV."
         )
+
+    # ------------------------------------------------------
+    # Ouverture
+    # ------------------------------------------------------
 
     uploaded_file.seek(0)
 
@@ -596,6 +567,10 @@ def process_heidenhain(
 
     source_ws = wb_formula[sheet_name]
 
+    # ------------------------------------------------------
+    # Version avec valeurs calculées
+    # ------------------------------------------------------
+
     uploaded_file.seek(0)
 
     wb_values = openpyxl.load_workbook(
@@ -606,55 +581,28 @@ def process_heidenhain(
     values_ws = wb_values[sheet_name]
 
     # ------------------------------------------------------
-    # Toutes les colonnes réellement présentes
+    # Colonnes
     # ------------------------------------------------------
 
-    detected_headers = get_headers(
-        source_ws,
-        header_row,
-    )
-
-    # ------------------------------------------------------
-    # Vérification des colonnes indispensables
-    # ------------------------------------------------------
-
-    required = [
-        status_column,
-        id_column,
-        "Groupe Produit",
-        "Prix (PPC)",
-        "Prix (SAV)",
-        "Prix HA",
-    ]
-
-    validate_required_columns(
-        detected_headers,
-        required,
-        "fichier Heidenhain",
-    )
-
-    # ------------------------------------------------------
-    # IMPORTANT :
-    # on utilise TOUTES les colonnes détectées.
-    # ------------------------------------------------------
-
-    output_columns = list(
-        detected_headers
+    required = list(
+        dict.fromkeys(
+            output_columns
+            + [
+                status_column,
+                id_column,
+            ]
+        )
     )
 
     source_columns = find_columns(
         source_ws,
         header_row,
-        output_columns,
+        required,
     )
-
-    # ------------------------------------------------------
-    # Sécurité
-    # ------------------------------------------------------
 
     missing = [
         x
-        for x in output_columns
+        for x in required
         if x not in source_columns
     ]
 
@@ -664,7 +612,7 @@ def process_heidenhain(
         wb_values.close()
 
         raise ValueError(
-            "Colonnes Heidenhain impossibles à lire : "
+            "Colonnes Heidenhain introuvables : "
             + ", ".join(missing)
         )
 
@@ -677,7 +625,7 @@ def process_heidenhain(
     ]
 
     # ------------------------------------------------------
-    # Dernière ligne
+    # Dernière ligne utile
     # ------------------------------------------------------
 
     max_row = data_start_row - 1
@@ -703,7 +651,7 @@ def process_heidenhain(
     )
 
     # ------------------------------------------------------
-    # Nouveau fichier
+    # Nouveau classeur
     # ------------------------------------------------------
 
     output_wb = openpyxl.Workbook()
@@ -721,11 +669,16 @@ def process_heidenhain(
         start=1,
     ):
 
+        source_col = source_columns.get(
+            column_name
+        )
+
+        if source_col is None:
+            continue
+
         source_header = source_ws.cell(
             row=header_row,
-            column=source_columns[
-                column_name
-            ],
+            column=source_col,
         )
 
         target_header = output_ws.cell(
@@ -761,7 +714,10 @@ def process_heidenhain(
         normalized = normalize(value)
 
         if normalized:
-            existing_ids.add(normalized)
+
+            existing_ids.add(
+                normalized
+            )
 
     # ------------------------------------------------------
     # Traitement
@@ -783,6 +739,10 @@ def process_heidenhain(
         )
     ):
 
+        # ----------------------------------------------
+        # Copie de la ligne originale
+        # ----------------------------------------------
+
         copy_heidenhain_row(
             source_ws=source_ws,
             values_ws=values_ws,
@@ -793,6 +753,10 @@ def process_heidenhain(
             output_columns=output_columns,
         )
 
+        # ----------------------------------------------
+        # Statut
+        # ----------------------------------------------
+
         status = normalize(
             source_ws.cell(
                 row=source_row,
@@ -801,10 +765,16 @@ def process_heidenhain(
         )
 
         if status == "VG":
+
             vg_count += 1
 
         elif status == "PG":
+
             pg_count += 1
+
+        # ----------------------------------------------
+        # Création SAV
+        # ----------------------------------------------
 
         if status in STATUS_TO_DUPLICATE:
 
@@ -821,7 +791,9 @@ def process_heidenhain(
 
             if original_id:
 
-                new_id = f"{original_id}_SAV"
+                new_id = (
+                    f"{original_id}_SAV"
+                )
 
                 normalized_new = normalize(
                     new_id
@@ -849,6 +821,10 @@ def process_heidenhain(
                 empty_id_count += 1
 
         output_row += 1
+
+        # ----------------------------------------------
+        # Progression
+        # ----------------------------------------------
 
         if (
             progress
@@ -912,9 +888,12 @@ def process_heidenhain(
         start=1,
     ):
 
-        source_col = source_columns[
+        source_col = source_columns.get(
             column_name
-        ]
+        )
+
+        if source_col is None:
+            continue
 
         source_letter = (
             openpyxl.utils.get_column_letter(
@@ -958,15 +937,35 @@ def process_heidenhain(
     wb_formula.close()
     wb_values.close()
 
+    # ------------------------------------------------------
+    # Statistiques
+    # ------------------------------------------------------
+
     stats = {
+
         "total_rows": total_rows,
-        "total_columns": len(output_columns),
-        "columns": output_columns,
+
+        "total_columns": len(
+            output_columns
+        ),
+
+        "columns_kept": output_columns.copy(),
+
         "vg": vg_count,
+
         "pg": pg_count,
-        "vg_pg": vg_count + pg_count,
-        "created": len(rows_to_create),
+
+        "vg_pg": (
+            vg_count
+            + pg_count
+        ),
+
+        "created": len(
+            rows_to_create
+        ),
+
         "duplicates": duplicate_count,
+
         "empty_ids": empty_id_count,
     }
 
@@ -980,8 +979,7 @@ def process_heidenhain(
     if status_display:
 
         status_display.success(
-            f"✅ Fichier Heidenhain créé avec "
-            f"{len(output_columns)} colonnes."
+            "✅ Fichier Heidenhain créé."
         )
 
     return data, stats
@@ -1008,7 +1006,9 @@ def load_category_mapping(
 
     if category_sheet not in wb.sheetnames:
 
-        names = ", ".join(wb.sheetnames)
+        names = ", ".join(
+            wb.sheetnames
+        )
 
         wb.close()
 
@@ -1024,6 +1024,14 @@ def load_category_mapping(
 
     rows_loaded = 0
 
+    category_id_col = int(
+        category_id_col
+    )
+
+    category_search_col = int(
+        category_search_col
+    )
+
     for row in ws.iter_rows(
         min_row=1,
         values_only=True,
@@ -1035,6 +1043,7 @@ def load_category_mapping(
         ) - 1
 
         if max_index >= len(row):
+
             continue
 
         category_id = row[
@@ -1049,6 +1058,7 @@ def load_category_mapping(
             category_id is None
             or category_text is None
         ):
+
             continue
 
         category_id = str(
@@ -1059,7 +1069,11 @@ def load_category_mapping(
             category_text
         ).strip()
 
-        if not category_id or not category_text:
+        if (
+            not category_id
+            or not category_text
+        ):
+
             continue
 
         rows_loaded += 1
@@ -1074,13 +1088,19 @@ def load_category_mapping(
                 normalized_text
             ] = category_id
 
-        for separator in ["-", "–"]:
+        for separator in [
+            "-",
+            "–",
+        ]:
 
             if separator in category_text:
 
                 first_part = (
                     category_text
-                    .split(separator, 1)[0]
+                    .split(
+                        separator,
+                        1,
+                    )[0]
                     .strip()
                 )
 
@@ -1104,12 +1124,17 @@ def load_category_mapping(
     return mapping, rows_loaded
 
 
+# ==========================================================
+# RECHERCHE CATEGORIE
+# ==========================================================
+
 def find_category_id_fast(
     groupe_produit,
     category_mapping,
 ):
 
     if groupe_produit is None:
+
         return None
 
     group = str(
@@ -1117,6 +1142,7 @@ def find_category_id_fast(
     ).strip()
 
     if not group:
+
         return None
 
     category_id = category_mapping.get(
@@ -1124,15 +1150,22 @@ def find_category_id_fast(
     )
 
     if category_id is not None:
+
         return category_id
 
-    for separator in ["-", "–"]:
+    for separator in [
+        "-",
+        "–",
+    ]:
 
         if separator in group:
 
             first_part = (
                 group
-                .split(separator, 1)[0]
+                .split(
+                    separator,
+                    1,
+                )[0]
                 .strip()
             )
 
@@ -1140,11 +1173,14 @@ def find_category_id_fast(
 
                 category_id = (
                     category_mapping.get(
-                        normalize(first_part)
+                        normalize(
+                            first_part
+                        )
                     )
                 )
 
                 if category_id is not None:
+
                     return category_id
 
     return None
@@ -1161,13 +1197,15 @@ def ensure_odoo_columns(
     placement_config,
 ):
 
+    header_row = int(header_row)
+
     existing_headers = get_headers(
         ws,
         header_row,
     )
 
     existing_normalized = {
-        normalize(x): x
+        normalize(x)
         for x in existing_headers
     }
 
@@ -1178,8 +1216,18 @@ def ensure_odoo_columns(
         not in existing_normalized
     ]
 
+    # Rien à ajouter
     if not missing_columns:
-        return
+
+        return []
+
+    added_columns = []
+
+    # ------------------------------------------------------
+    # On ajoute uniquement les colonnes absentes.
+    # Les colonnes existantes ne sont jamais déplacées
+    # volontairement.
+    # ------------------------------------------------------
 
     for new_column in missing_columns:
 
@@ -1188,30 +1236,49 @@ def ensure_odoo_columns(
             "__END__",
         )
 
+        # ----------------------------------------------
+        # Ajout à la fin
+        # ----------------------------------------------
+
         if placement == "__END__":
 
-            new_col = ws.max_column + 1
+            new_col = (
+                ws.max_column + 1
+            )
 
         else:
+
+            target_col = None
 
             before_normalized = normalize(
                 placement
             )
 
-            target_col = None
-
             for cell in ws[header_row]:
 
-                if normalize(
-                    cell.value
-                ) == before_normalized:
+                if (
+                    normalize(
+                        cell.value
+                    )
+                    == before_normalized
+                ):
 
-                    target_col = cell.column
+                    target_col = (
+                        cell.column
+                    )
+
                     break
+
+            # ------------------------------------------
+            # Si la colonne de placement n'existe
+            # plus, on ajoute à la fin.
+            # ------------------------------------------
 
             if target_col is None:
 
-                new_col = ws.max_column + 1
+                new_col = (
+                    ws.max_column + 1
+                )
 
             else:
 
@@ -1222,10 +1289,18 @@ def ensure_odoo_columns(
 
                 new_col = target_col
 
+        # ----------------------------------------------
+        # En-tête
+        # ----------------------------------------------
+
         ws.cell(
             row=header_row,
             column=new_col,
         ).value = new_column
+
+        # ----------------------------------------------
+        # Style
+        # ----------------------------------------------
 
         if new_col > 1:
 
@@ -1239,6 +1314,12 @@ def ensure_odoo_columns(
                     column=new_col,
                 ),
             )
+
+        added_columns.append(
+            new_column
+        )
+
+    return added_columns
 
 
 # ==========================================================
@@ -1262,6 +1343,10 @@ def process_odoo(
 ):
 
     start_total = time.perf_counter()
+
+    odoo_header_row = int(
+        odoo_header_row
+    )
 
     # ======================================================
     # CATEGORIES
@@ -1326,37 +1411,89 @@ def process_odoo(
         heidenhain_sheet
     ]
 
-    # ------------------------------------------------------
-    # Détection des colonnes
-    # ------------------------------------------------------
-
     h_headers = get_headers(
         h_ws,
         1,
     )
 
-    required_heidenhain = [
-        "ID",
-        "Description",
-        "Marque",
-        "Statut",
-        "Groupe Produit",
-        "Prix (PPC)",
-        "Prix (SAV)",
-        "Prix HA",
+    # ======================================================
+    # COLONNES HEIDENHAIN NECESSAIRES
+    # ======================================================
+
+    missing_h = [
+        x
+        for x in REQUIRED_HEIDENHAIN_FOR_ODOO
+        if normalize(x)
+        not in {
+            normalize(header)
+            for header in h_headers
+        }
     ]
 
-    validate_required_columns(
-        h_headers,
-        required_heidenhain,
-        "fichier Heidenhain préparé",
-    )
+    if missing_h:
+
+        wb_h.close()
+
+        raise ValueError(
+            "Le fichier Heidenhain préparé "
+            "ne contient pas les colonnes nécessaires : "
+            + ", ".join(missing_h)
+        )
 
     h_columns = find_columns(
         h_ws,
         1,
-        required_heidenhain,
+        REQUIRED_HEIDENHAIN_FOR_ODOO,
     )
+
+    # ======================================================
+    # VÉRIFICATION DES COLONNES SOURCE ODOO
+    # ======================================================
+
+    required_sources = set()
+
+    for (
+        odoo_field,
+        config,
+    ) in mapping_config.items():
+
+        source = config.get(
+            "source"
+        )
+
+        if source in (
+            None,
+            "__PRICE__",
+            "__BARCODE__",
+        ):
+
+            continue
+
+        required_sources.add(
+            source
+        )
+
+    missing_sources = [
+        source
+        for source in required_sources
+        if normalize(source)
+        not in {
+            normalize(x)
+            for x in h_headers
+        }
+    ]
+
+    if missing_sources:
+
+        wb_h.close()
+
+        raise ValueError(
+            "Colonnes source absentes du fichier "
+            "Heidenhain : "
+            + ", ".join(
+                missing_sources
+            )
+        )
 
     # ======================================================
     # ODOO
@@ -1389,49 +1526,34 @@ def process_odoo(
     ]
 
     # ======================================================
-    # DETECTION ID ODOO
+    # COLONNES ODOO DEMANDEES
     # ======================================================
 
-    original_odoo_headers = get_headers(
-        ws,
-        int(odoo_header_row),
-    )
-
-    id_exists = any(
-        normalize(x) == "ID"
-        for x in original_odoo_headers
+    required_odoo_columns = list(
+        mapping_config.keys()
     )
 
     # ------------------------------------------------------
-    # Les champs métier sont obligatoires.
-    #
-    # "id" est différent :
-    # s'il existe, on le conserve ;
-    # s'il n'existe pas, on ne l'ajoute pas.
+    # Ajout uniquement des colonnes manquantes
     # ------------------------------------------------------
 
-    required_odoo_columns = [
-        field
-        for field in mapping_config.keys()
-        if field != "id"
-    ]
-
-    ensure_odoo_columns(
-        ws=ws,
-        header_row=int(odoo_header_row),
-        required_columns=required_odoo_columns,
-        placement_config=placement_config,
+    added_odoo_columns = (
+        ensure_odoo_columns(
+            ws=ws,
+            header_row=odoo_header_row,
+            required_columns=required_odoo_columns,
+            placement_config=placement_config,
+        )
     )
 
     # ======================================================
-    # RELECTURE COLONNES ODOO
+    # RELECTURE DES COLONNES ODOO
     # ======================================================
 
     odoo_columns = find_columns(
         ws,
-        int(odoo_header_row),
-        required_odoo_columns
-        + (["id"] if id_exists else []),
+        odoo_header_row,
+        required_odoo_columns,
     )
 
     missing_odoo = [
@@ -1451,7 +1573,39 @@ def process_odoo(
         )
 
     # ======================================================
-    # INDEX ODOO
+    # DETECTION AUTOMATIQUE ID ODOO
+    # ======================================================
+
+    id_exists = (
+        find_column(
+            ws,
+            odoo_header_row,
+            "id",
+        )
+        is not None
+    )
+
+    id_column_odoo = find_column(
+        ws,
+        odoo_header_row,
+        "id",
+    )
+
+    # ======================================================
+    # MESSAGE MODE IMPORT
+    # ======================================================
+
+    if id_exists:
+
+        if status_display:
+
+            status_display.info(
+                "ℹ️ Mode import Odoo activé : "
+                "l'ID Odoo existant est conservé."
+            )
+
+    # ======================================================
+    # INDEX DES REFERENCES ODOO
     # ======================================================
 
     if status_display:
@@ -1467,7 +1621,7 @@ def process_odoo(
     reference_index = {}
 
     for row in range(
-        int(odoo_header_row) + 1,
+        odoo_header_row + 1,
         ws.max_row + 1,
     ):
 
@@ -1476,9 +1630,14 @@ def process_odoo(
             column=reference_col,
         ).value
 
-        ref = clean_reference(value)
+        ref = clean_reference(
+            value
+        )
 
-        if ref and ref not in reference_index:
+        if (
+            ref
+            and ref not in reference_index
+        ):
 
             reference_index[
                 ref
@@ -1503,23 +1662,21 @@ def process_odoo(
         for name in required_odoo_columns
     }
 
-    if id_exists:
-
-        col["id"] = odoo_columns["id"]
-
     # ======================================================
-    # COLONNES HEIDENHAIN
+    # ACCÈS COLONNES HEIDENHAIN
     # ======================================================
 
     def hcol(name):
 
-        value = h_columns.get(name)
+        value = h_columns.get(
+            name
+        )
 
         if value is None:
 
             raise ValueError(
-                f"La colonne Heidenhain "
-                f"« {name} » est introuvable."
+                f"Colonne Heidenhain introuvable : "
+                f"{name}"
             )
 
         return value
@@ -1542,13 +1699,16 @@ def process_odoo(
     # ======================================================
 
     next_empty_row = (
-        int(odoo_header_row) + 1
+        odoo_header_row + 1
     )
 
-    while ws.cell(
-        row=next_empty_row,
-        column=reference_col,
-    ).value not in (None, ""):
+    while (
+        ws.cell(
+            row=next_empty_row,
+            column=reference_col,
+        ).value
+        not in (None, "")
+    ):
 
         next_empty_row += 1
 
@@ -1576,27 +1736,31 @@ def process_odoo(
     ):
 
         # --------------------------------------------------
-        # Vérification longueur ligne
+        # Sécurité
         # --------------------------------------------------
 
-        id_column_index = hcol("ID") - 1
+        id_position = (
+            hcol("ID") - 1
+        )
 
-        if id_column_index >= len(row_values):
+        if id_position >= len(
+            row_values
+        ):
 
-            raise ValueError(
-                "La ligne Heidenhain ne contient pas "
-                "la colonne ID attendue."
-            )
+            continue
 
         # --------------------------------------------------
         # ID HEIDENHAIN
         # --------------------------------------------------
 
         id_value = row_values[
-            id_column_index
+            id_position
         ]
 
-        if id_value in (None, ""):
+        if id_value in (
+            None,
+            "",
+        ):
 
             break
 
@@ -1607,6 +1771,7 @@ def process_odoo(
         if not reference:
 
             empty_references += 1
+
             continue
 
         processed += 1
@@ -1619,7 +1784,10 @@ def process_odoo(
         # RECHERCHE ODOO
         # ==================================================
 
-        if normalized_ref in reference_index:
+        if (
+            normalized_ref
+            in reference_index
+        ):
 
             target_row = (
                 reference_index[
@@ -1629,11 +1797,13 @@ def process_odoo(
 
             updated += 1
 
-            is_new_row = False
+            existing_odoo_row = True
 
         else:
 
-            target_row = next_empty_row
+            target_row = (
+                next_empty_row
+            )
 
             next_empty_row += 1
 
@@ -1643,27 +1813,31 @@ def process_odoo(
 
             created += 1
 
-            is_new_row = True
+            existing_odoo_row = False
 
         # ==================================================
         # ID ODOO
         # ==================================================
         #
-        # Si la colonne id existe :
+        # IMPORTANT :
         #
-        # - ligne existante :
-        #   NE PAS toucher à l'ID.
+        # Si la référence existe :
+        #     on NE TOUCHE PAS à l'ID Odoo.
         #
-        # - nouvelle ligne :
-        #   laisser vide.
+        # Si la référence est nouvelle :
+        #     l'ID reste vide.
         #
-        # Odoo créera son ID.
         # ==================================================
 
-        # Aucun traitement nécessaire ici.
+        if (
+            id_exists
+            and existing_odoo_row
+        ):
+
+            pass
 
         # ==================================================
-        # SOURCE VALUES
+        # VALEURS HEIDENHAIN
         # ==================================================
 
         status = row_values[
@@ -1748,103 +1922,123 @@ def process_odoo(
         ).value = description
 
         # --------------------------------------------------
-        # marque
+        # Marque
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["x_studio_marque_1"],
+            column=col[
+                "x_studio_marque_1"
+            ],
         ).value = marque
 
         # --------------------------------------------------
-        # statut
+        # Statut
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["x_studio_sales_status"],
+            column=col[
+                "x_studio_sales_status"
+            ],
         ).value = status
 
         # --------------------------------------------------
-        # catégorie
+        # Catégorie
         # --------------------------------------------------
 
         if category_id is not None:
 
             ws.cell(
                 row=target_row,
-                column=col["categ_id"],
+                column=col[
+                    "categ_id"
+                ],
             ).value = category_id
 
         # --------------------------------------------------
-        # prix de vente
+        # Prix vente
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["list_price"],
+            column=col[
+                "list_price"
+            ],
         ).value = price
 
         # --------------------------------------------------
-        # fournisseur
+        # Fournisseur
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["seller_ids/partner_id"],
+            column=col[
+                "seller_ids/partner_id"
+            ],
         ).value = (
             "HEIDENHAIN FRANCE"
         )
 
         # --------------------------------------------------
-        # prix fournisseur
+        # Prix achat
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["seller_ids/price"],
+            column=col[
+                "seller_ids/price"
+            ],
         ).value = prix_ha
 
         # --------------------------------------------------
-        # achat
+        # Achat
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["purchase_ok"],
+            column=col[
+                "purchase_ok"
+            ],
         ).value = "VRAI"
 
         # --------------------------------------------------
-        # vente
+        # Vente
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["sale_ok"],
+            column=col[
+                "sale_ok"
+            ],
         ).value = "VRAI"
 
         # --------------------------------------------------
-        # type
+        # Type
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["type"],
+            column=col[
+                "type"
+            ],
         ).value = "Consommable"
 
         # --------------------------------------------------
-        # facturation
+        # Facturation
         # --------------------------------------------------
 
         ws.cell(
             row=target_row,
-            column=col["invoice_policy"],
+            column=col[
+                "invoice_policy"
+            ],
         ).value = (
             "Quantités livrées"
         )
 
         # ==================================================
-        # CODE BARRE
+        # BARCODE
         # ==================================================
 
         if is_sav(reference):
@@ -1853,11 +2047,15 @@ def process_odoo(
 
         else:
 
-            barcode = f"I {reference}"
+            barcode = (
+                f"I {reference}"
+            )
 
         ws.cell(
             row=target_row,
-            column=col["barcode"],
+            column=col[
+                "barcode"
+            ],
         ).value = barcode
 
         # ==================================================
@@ -1875,13 +2073,19 @@ def process_odoo(
             pct = 40 + int(
                 (
                     (index + 1)
-                    / max(1, total_h_rows)
+                    / max(
+                        1,
+                        total_h_rows,
+                    )
                 )
                 * 50
             )
 
             progress.progress(
-                min(pct, 90),
+                min(
+                    pct,
+                    90,
+                ),
                 text=(
                     f"⚙️ Odoo : "
                     f"{index + 1:,} / "
@@ -1914,7 +2118,9 @@ def process_odoo(
 
     output = BytesIO()
 
-    wb_o.save(output)
+    wb_o.save(
+        output
+    )
 
     output.seek(0)
 
@@ -1941,18 +2147,43 @@ def process_odoo(
             "✅ Fichier Odoo préparé avec succès."
         )
 
+    # ======================================================
+    # STATISTIQUES
+    # ======================================================
+
     stats = {
+
         "processed": processed,
+
         "updated": updated,
+
         "created": created,
+
         "category_found": category_found,
+
         "category_missing": category_missing,
+
         "empty_references": empty_references,
+
         "category_rows": category_rows,
+
         "odoo_indexed": len(
             reference_index
         ),
+
         "id_exists": id_exists,
+
+        "added_odoo_columns": (
+            added_odoo_columns
+        ),
+
+        "total_odoo_columns": len(
+            get_headers(
+                ws,
+                odoo_header_row,
+            )
+        ),
+
         "total_time": total_time,
     }
 
@@ -1969,31 +2200,46 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
 
-    st.subheader("📘 Prix Heidenhain")
+    st.subheader(
+        "📘 Prix Heidenhain"
+    )
 
     heidenhain_file = st.file_uploader(
         "Fichier Prix Heidenhain",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="heidenhain_file",
     )
 
 with col2:
 
-    st.subheader("📗 Fichier Odoo")
+    st.subheader(
+        "📗 Fichier Odoo"
+    )
 
     odoo_file = st.file_uploader(
         "Fichier d'import Odoo",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="odoo_file",
     )
 
 with col3:
 
-    st.subheader("📂 Catégorie de produit")
+    st.subheader(
+        "📂 Catégorie de produit"
+    )
 
     category_file = st.file_uploader(
         "Fichier Catégorie de produit",
-        type=["xlsx", "xlsm"],
+        type=[
+            "xlsx",
+            "xlsm",
+        ],
         key="category_file",
     )
 
@@ -2002,7 +2248,9 @@ with col3:
 # SIDEBAR
 # ==========================================================
 
-st.sidebar.header("⚙️ Paramètres")
+st.sidebar.header(
+    "⚙️ Paramètres"
+)
 
 
 # ==========================================================
@@ -2018,11 +2266,13 @@ heidenhain_sheet = st.sidebar.text_input(
     "Distributeurs",
 )
 
-heidenhain_header_row = st.sidebar.number_input(
-    "Ligne des en-têtes Heidenhain",
-    min_value=1,
-    value=4,
-    step=1,
+heidenhain_header_row = (
+    st.sidebar.number_input(
+        "Ligne des en-têtes Heidenhain",
+        min_value=1,
+        value=4,
+        step=1,
+    )
 )
 
 
@@ -2045,7 +2295,8 @@ if heidenhain_file is not None:
     if heidenhain_detected_columns:
 
         st.sidebar.success(
-            f"📋 {len(heidenhain_detected_columns)} "
+            f"📋 "
+            f"{len(heidenhain_detected_columns)} "
             "colonnes Heidenhain détectées."
         )
 
@@ -2057,40 +2308,55 @@ if heidenhain_file is not None:
 
 
 # ==========================================================
-# COLONNES A CONSERVER
-#
-# IMPORTANT :
-# TOUTES LES COLONNES SONT CONSERVEES.
+# COLONNES A CONSERVER ETAPE 1
 # ==========================================================
 
 st.sidebar.subheader(
-    "📋 Colonnes conservées à l'étape 1"
+    "📋 Colonnes à conserver à l'étape 1"
 )
 
 if heidenhain_detected_columns:
 
-    heidenhain_output_columns = list(
-        heidenhain_detected_columns
+    # ------------------------------------------------------
+    # PAR DEFAUT :
+    # TOUTES LES COLONNES
+    # ------------------------------------------------------
+
+    heidenhain_output_columns = (
+        st.sidebar.multiselect(
+            "Sélectionner les colonnes à garder",
+            options=heidenhain_detected_columns,
+            default=heidenhain_detected_columns,
+            key="heidenhain_output_columns",
+            help=(
+                "Toutes les colonnes détectées sont "
+                "conservées automatiquement. "
+                "Vous pouvez décocher celles que vous "
+                "ne souhaitez pas conserver."
+            ),
+        )
     )
 
-    st.sidebar.success(
-        f"✅ Les {len(heidenhain_output_columns)} "
-        "colonnes détectées sont conservées."
-    )
+    # ------------------------------------------------------
+    # Vérification des colonnes nécessaires
+    # ------------------------------------------------------
 
-    with st.sidebar.expander(
-        "👁️ Voir les colonnes conservées",
-        expanded=False,
-    ):
+    missing_required_step1 = [
+        column
+        for column in REQUIRED_HEIDENHAIN_FOR_ODOO
+        if column in heidenhain_detected_columns
+        and column not in heidenhain_output_columns
+    ]
 
-        for index, column_name in enumerate(
-            heidenhain_output_columns,
-            start=1,
-        ):
+    if missing_required_step1:
 
-            st.write(
-                f"{index}. {column_name}"
+        st.sidebar.warning(
+            "⚠️ Pour l'étape 2, les colonnes suivantes "
+            "doivent être conservées : "
+            + ", ".join(
+                missing_required_step1
             )
+        )
 
 else:
 
@@ -2098,7 +2364,7 @@ else:
 
 
 # ==========================================================
-# COLONNES HEIDENHAIN NECESSAIRES
+# COLONNES HEIDENHAIN UTILISEES
 # ==========================================================
 
 status_column = "Statut"
@@ -2109,41 +2375,26 @@ sav_column = "Prix (SAV)"
 prix_ha_column = "Prix HA"
 
 
+# ==========================================================
+# VERIFICATION HEIDENHAIN
+# ==========================================================
+
 if heidenhain_file is not None:
-
-    required_step1 = [
-        id_column,
-        status_column,
-        group_column,
-        ppc_column,
-        sav_column,
-        prix_ha_column,
-    ]
-
-    detected_normalized = {
-        normalize(x)
-        for x in heidenhain_detected_columns
-    }
 
     missing_step1 = [
         x
-        for x in required_step1
-        if normalize(x)
-        not in detected_normalized
+        for x in REQUIRED_HEIDENHAIN_FOR_ODOO
+        if x not in heidenhain_detected_columns
     ]
 
     if missing_step1:
 
         st.sidebar.error(
-            "⚠️ Colonnes nécessaires absentes : "
-            + ", ".join(missing_step1)
-        )
-
-    else:
-
-        st.sidebar.success(
-            "✅ Toutes les colonnes nécessaires "
-            "aux calculs sont présentes."
+            "❌ Colonnes nécessaires absentes "
+            "du fichier Heidenhain : "
+            + ", ".join(
+                missing_step1
+            )
         )
 
 
@@ -2162,45 +2413,62 @@ odoo_sheet = st.sidebar.text_input(
     "Sheet1",
 )
 
-odoo_header_row = st.sidebar.number_input(
-    "Ligne des en-têtes Odoo",
-    min_value=1,
-    value=1,
-    step=1,
+odoo_header_row = (
+    st.sidebar.number_input(
+        "Ligne des en-têtes Odoo",
+        min_value=1,
+        value=1,
+        step=1,
+    )
 )
 
 
 # ==========================================================
-# DETECTION ODOO
+# DETECTION AUTOMATIQUE ODOO
 # ==========================================================
 
 odoo_detected_columns = []
 
 if odoo_file is not None:
 
-    odoo_detected_columns = detect_excel_headers(
-        odoo_file,
-        odoo_sheet,
-        odoo_header_row,
+    odoo_detected_columns = (
+        detect_excel_headers(
+            odoo_file,
+            odoo_sheet,
+            odoo_header_row,
+        )
     )
 
     if odoo_detected_columns:
 
         st.sidebar.success(
-            f"📋 {len(odoo_detected_columns)} "
+            f"📋 "
+            f"{len(odoo_detected_columns)} "
             "colonnes Odoo détectées."
         )
 
-        odoo_normalized = {
+        # ----------------------------------------------
+        # DETECTION AUTOMATIQUE ID
+        # ----------------------------------------------
+
+        detected_normalized = {
             normalize(x)
             for x in odoo_detected_columns
         }
 
-        if "ID" in odoo_normalized:
+        if "ID" in detected_normalized:
 
             st.sidebar.info(
                 "ℹ️ Mode import Odoo activé : "
                 "l'ID Odoo existant est conservé."
+            )
+
+        else:
+
+            st.sidebar.info(
+                "ℹ️ Aucun champ « id » détecté : "
+                "les nouvelles lignes resteront "
+                "sans ID Odoo."
             )
 
     else:
@@ -2211,7 +2479,7 @@ if odoo_file is not None:
 
 
 # ==========================================================
-# CONFIGURATION COLONNES ODOO MANQUANTES
+# CONFIGURATION DES COLONNES ODOO MANQUANTES
 # ==========================================================
 
 st.sidebar.subheader(
@@ -2220,7 +2488,10 @@ st.sidebar.subheader(
 
 placement_config = {}
 
-if odoo_file is not None and odoo_detected_columns:
+if (
+    odoo_file is not None
+    and odoo_detected_columns
+):
 
     detected_normalized = {
         normalize(x)
@@ -2228,20 +2499,12 @@ if odoo_file is not None and odoo_detected_columns:
     }
 
     # ------------------------------------------------------
-    # ID EXCLU :
-    # s'il existe, il est conservé.
-    # s'il n'existe pas, on ne demande pas de position.
+    # UNIQUEMENT LES COLONNES ABSENTES
     # ------------------------------------------------------
-
-    fields_for_placement = [
-        field
-        for field in ODOO_FIELD_CONFIGURATION
-        if field != "id"
-    ]
 
     missing_odoo_columns = [
         field
-        for field in fields_for_placement
+        for field in ODOO_FIELD_CONFIGURATION
         if normalize(field)
         not in detected_normalized
     ]
@@ -2249,22 +2512,32 @@ if odoo_file is not None and odoo_detected_columns:
     if missing_odoo_columns:
 
         st.sidebar.warning(
-            f"⚠️ {len(missing_odoo_columns)} "
+            f"⚠️ "
+            f"{len(missing_odoo_columns)} "
             "colonne(s) Odoo absente(s)."
         )
 
         st.sidebar.caption(
-            "Les colonnes déjà présentes dans Odoo "
-            "gardent exactement leur ordre. "
-            "Vous choisissez uniquement l'emplacement "
-            "des nouvelles colonnes."
+            "Les colonnes déjà présentes gardent "
+            "exactement leur ordre. "
+            "Une question de placement est affichée "
+            "uniquement pour les colonnes absentes."
         )
 
+        # --------------------------------------------------
+        # Positions disponibles
+        # --------------------------------------------------
+
         placement_options = [
-            ("__END__", "➡️ À la fin")
+            (
+                "__END__",
+                "➡️ À la fin",
+            )
         ]
 
-        for existing in odoo_detected_columns:
+        for existing in (
+            odoo_detected_columns
+        ):
 
             placement_options.append(
                 (
@@ -2285,6 +2558,10 @@ if odoo_file is not None and odoo_detected_columns:
             in placement_options
         }
 
+        # --------------------------------------------------
+        # QUESTION UNIQUEMENT POUR LES ABSENTES
+        # --------------------------------------------------
+
         for field in missing_odoo_columns:
 
             config = (
@@ -2302,27 +2579,34 @@ if odoo_file is not None and odoo_detected_columns:
                 f"**{field}** — {label}"
             )
 
-            selected = st.sidebar.selectbox(
-                f"Où placer « {field} » ?",
-                options=placement_values,
-                format_func=lambda x: (
-                    placement_labels[x]
-                ),
-                key=f"placement_{field}",
+            selected = (
+                st.sidebar.selectbox(
+                    f"Où placer « {field} » ?",
+                    options=placement_values,
+                    format_func=(
+                        lambda x:
+                        placement_labels[x]
+                    ),
+                    key=(
+                        f"placement_{field}"
+                    ),
+                )
             )
 
-            placement_config[field] = selected
+            placement_config[
+                field
+            ] = selected
 
     else:
 
         st.sidebar.success(
-            "✅ Toutes les colonnes métier demandées "
+            "✅ Toutes les colonnes demandées "
             "existent déjà dans Odoo."
         )
 
 
 # ==========================================================
-# AFFICHAGE CORRESPONDANCES
+# AFFICHAGE DES CORRESPONDANCES
 # ==========================================================
 
 if odoo_file is not None:
@@ -2332,31 +2616,32 @@ if odoo_file is not None:
         expanded=False,
     ):
 
-        for field, config in (
+        for (
+            field,
+            config,
+        ) in (
             ODOO_FIELD_CONFIGURATION.items()
         ):
 
-            source = config.get("source")
-            fixed = config.get("fixed")
+            source = config.get(
+                "source"
+            )
 
-            if field == "id":
+            fixed = config.get(
+                "fixed"
+            )
 
-                text = (
-                    "← ID Odoo existant "
-                    "(conservé uniquement s'il existe)"
-                )
-
-            elif source == "__PRICE__":
+            if source == "__PRICE__":
 
                 text = (
-                    "← Prix (SAV) si référence _SAV, "
+                    "Prix (SAV) si référence _SAV, "
                     "sinon Prix (PPC)"
                 )
 
             elif source == "__BARCODE__":
 
                 text = (
-                    "← Créé automatiquement à partir "
+                    "Créé automatiquement à partir "
                     "du default_code"
                 )
 
@@ -2370,6 +2655,13 @@ if odoo_file is not None:
 
                 text = (
                     f"← valeur fixe : {fixed}"
+                )
+
+            elif field == "id":
+
+                text = (
+                    "← ID Odoo existant "
+                    "(détecté automatiquement)"
                 )
 
             else:
@@ -2398,18 +2690,22 @@ category_sheet = st.sidebar.text_input(
     "Sheet1",
 )
 
-category_id_col = st.sidebar.number_input(
-    "Colonne ID catégorie",
-    min_value=1,
-    value=2,
-    step=1,
+category_id_col = (
+    st.sidebar.number_input(
+        "Colonne ID catégorie",
+        min_value=1,
+        value=2,
+        step=1,
+    )
 )
 
-category_search_col = st.sidebar.number_input(
-    "Colonne recherche catégorie",
-    min_value=1,
-    value=3,
-    step=1,
+category_search_col = (
+    st.sidebar.number_input(
+        "Colonne recherche catégorie",
+        min_value=1,
+        value=3,
+        step=1,
+    )
 )
 
 
@@ -2426,7 +2722,8 @@ st.header(
 if heidenhain_file is None:
 
     st.info(
-        "👆 Importez le fichier Heidenhain pour commencer."
+        "👆 Importez le fichier Heidenhain "
+        "pour commencer."
     )
 
 else:
@@ -2435,21 +2732,39 @@ else:
         """
 Le fichier Heidenhain est analysé automatiquement.
 
-**Toutes les colonnes détectées sont conservées dans le
-fichier de l'étape 1, dans leur ordre d'origine.**
+**Toutes les colonnes détectées sont conservées
+par défaut**, dans le même ordre que le fichier original.
 
-Le traitement conserve également la logique :
+Vous pouvez décocher les colonnes dont vous n'avez
+pas besoin.
+
+La logique existante est conservée :
 
 - Statuts VG / PG ;
-- création des `_SAV` ;
+- création des références `_SAV` ;
 - récupération du Prix (SAV) calculé ;
-- récupération du Prix (PPC) ;
-- récupération du Prix HA ;
-- conservation de toutes les autres colonnes ;
+- récupération du Prix (PPC) calculé ;
+- récupération du Prix HA calculé ;
 - détection des doublons ;
 - ajout des lignes SAV à la fin.
         """
     )
+
+    # ------------------------------------------------------
+    # Informations colonnes
+    # ------------------------------------------------------
+
+    if heidenhain_output_columns:
+
+        st.info(
+            f"📋 "
+            f"{len(heidenhain_output_columns)} "
+            "colonnes seront conservées dans l'étape 1."
+        )
+
+    # ------------------------------------------------------
+    # Traitement
+    # ------------------------------------------------------
 
     if st.session_state.heidenhain_processing:
 
@@ -2460,40 +2775,58 @@ Le traitement conserve également la logique :
             key="create_heidenhain_locked",
         )
 
-        progress_heidenhain = st.progress(
-            0,
-            text="Initialisation..."
+        progress_heidenhain = (
+            st.progress(
+                0,
+                text="Initialisation..."
+            )
         )
 
         status_heidenhain = st.empty()
 
         try:
 
-            result, stats = process_heidenhain(
+            result, stats = (
+                process_heidenhain(
 
-                uploaded_file=heidenhain_file,
+                    uploaded_file=(
+                        heidenhain_file
+                    ),
 
-                sheet_name=heidenhain_sheet,
+                    sheet_name=(
+                        heidenhain_sheet
+                    ),
 
-                header_row=int(
-                    heidenhain_header_row
-                ),
+                    header_row=int(
+                        heidenhain_header_row
+                    ),
 
-                data_start_row=int(
-                    heidenhain_header_row
-                ) + 1,
+                    data_start_row=(
+                        int(
+                            heidenhain_header_row
+                        ) + 1
+                    ),
 
-                status_column=status_column,
+                    status_column=(
+                        status_column
+                    ),
 
-                id_column=id_column,
+                    id_column=(
+                        id_column
+                    ),
 
-                output_columns=(
-                    heidenhain_output_columns
-                ),
+                    output_columns=(
+                        heidenhain_output_columns
+                    ),
 
-                progress=progress_heidenhain,
+                    progress=(
+                        progress_heidenhain
+                    ),
 
-                status_display=status_heidenhain,
+                    status_display=(
+                        status_heidenhain
+                    ),
+                )
             )
 
             st.session_state.heidenhain_result = (
@@ -2531,28 +2864,56 @@ Le traitement conserve également la logique :
             key="create_heidenhain",
         ):
 
+            # ------------------------------------------
+            # Vérifications
+            # ------------------------------------------
+
             if not heidenhain_output_columns:
 
                 st.error(
-                    "⚠️ Aucune colonne détectée."
+                    "⚠️ Sélectionnez au moins "
+                    "une colonne."
                 )
 
-            elif "ID" not in {
-                normalize(x)
-                for x in heidenhain_output_columns
-            }:
+            elif "ID" not in (
+                heidenhain_output_columns
+            ):
 
                 st.error(
-                    "⚠️ La colonne ID est obligatoire."
+                    "⚠️ La colonne ID doit être "
+                    "conservée."
                 )
 
             else:
 
-                st.session_state.heidenhain_processing = (
-                    True
-                )
+                missing_required = [
+                    column
+                    for column
+                    in REQUIRED_HEIDENHAIN_FOR_ODOO
+                    if column
+                    in heidenhain_detected_columns
+                    and column
+                    not in heidenhain_output_columns
+                ]
 
-                st.rerun()
+                if missing_required:
+
+                    st.error(
+                        "⚠️ Les colonnes suivantes "
+                        "sont nécessaires pour "
+                        "l'étape 2 : "
+                        + ", ".join(
+                            missing_required
+                        )
+                    )
+
+                else:
+
+                    st.session_state.heidenhain_processing = (
+                        True
+                    )
+
+                    st.rerun()
 
 
 # ==========================================================
@@ -2567,21 +2928,34 @@ if st.session_state.heidenhain_result:
 
     st.success(
         f"✅ Fichier Heidenhain créé — "
-        f"{stats['total_columns']} colonnes conservées — "
-        f"{stats['created']:,} lignes SAV créées."
+        f"{stats.get('total_columns', 0):,} "
+        "colonnes conservées — "
+        f"{stats.get('created', 0):,} "
+        "lignes SAV créées."
     )
 
-    with st.expander(
-        "👁️ Voir les colonnes conservées"
-    ):
+    st.info(
+        f"📋 "
+        f"{stats.get('total_columns', 0):,} "
+        "colonnes conservées dans le fichier final."
+    )
 
-        for index, column_name in enumerate(
-            stats["columns"],
-            start=1,
+    columns_kept = (
+        stats.get(
+            "columns_kept",
+            [],
+        )
+    )
+
+    if columns_kept:
+
+        with st.expander(
+            "👁️ Voir les colonnes conservées",
+            expanded=False,
         ):
 
             st.write(
-                f"{index}. {column_name}"
+                columns_kept
             )
 
     st.download_button(
@@ -2612,14 +2986,16 @@ st.header(
 )
 
 if (
-    st.session_state.heidenhain_result is None
+    st.session_state.heidenhain_result
+    is None
     or odoo_file is None
     or category_file is None
 ):
 
     st.info(
         "Créez d'abord le fichier Heidenhain, "
-        "puis importez le fichier Odoo et le fichier catégorie."
+        "puis importez le fichier Odoo et "
+        "le fichier catégorie."
     )
 
 else:
@@ -2628,7 +3004,7 @@ else:
         """
 ### Correspondances automatiques
 
-- `id` ← ID Odoo existant, uniquement s'il existe déjà
+- `id` ← ID Odoo existant, uniquement si la colonne existe déjà
 - `default_code` ← ID Heidenhain
 - `name` ← Description
 - `x_studio_marque_1` ← Marque
@@ -2642,8 +3018,18 @@ else:
 - `type` ← Consommable
 - `invoice_policy` ← Quantités livrées
 - `barcode` ← `I ` + ID, sauf `_SAV`
+
+Les colonnes Odoo déjà présentes restent dans leur
+ordre original.
+
+Les colonnes Odoo absentes sont ajoutées automatiquement
+à l'emplacement choisi.
         """
     )
+
+    # ------------------------------------------------------
+    # Traitement Odoo
+    # ------------------------------------------------------
 
     if st.session_state.odoo_processing:
 
@@ -2654,68 +3040,79 @@ else:
             key="prepare_odoo_locked",
         )
 
-        progress_odoo = st.progress(
-            0,
-            text="Initialisation..."
+        progress_odoo = (
+            st.progress(
+                0,
+                text="Initialisation..."
+            )
         )
 
         status_odoo = st.empty()
 
         try:
 
-            prepared_heidenhain_file = BytesIO(
-                st.session_state.heidenhain_result
+            prepared_heidenhain_file = (
+                BytesIO(
+                    st.session_state
+                    .heidenhain_result
+                )
             )
 
-            result, stats = process_odoo(
+            result, stats = (
+                process_odoo(
 
-                heidenhain_file=(
-                    prepared_heidenhain_file
-                ),
+                    heidenhain_file=(
+                        prepared_heidenhain_file
+                    ),
 
-                odoo_file=(
-                    odoo_file
-                ),
+                    odoo_file=(
+                        odoo_file
+                    ),
 
-                category_file=(
-                    category_file
-                ),
+                    category_file=(
+                        category_file
+                    ),
 
-                heidenhain_sheet=(
-                    heidenhain_sheet
-                ),
+                    heidenhain_sheet=(
+                        heidenhain_sheet
+                    ),
 
-                odoo_sheet=(
-                    odoo_sheet
-                ),
+                    odoo_sheet=(
+                        odoo_sheet
+                    ),
 
-                category_sheet=(
-                    category_sheet
-                ),
+                    category_sheet=(
+                        category_sheet
+                    ),
 
-                category_id_col=int(
-                    category_id_col
-                ),
+                    category_id_col=int(
+                        category_id_col
+                    ),
 
-                category_search_col=int(
-                    category_search_col
-                ),
+                    category_search_col=int(
+                        category_search_col
+                    ),
 
-                mapping_config=(
-                    ODOO_FIELD_CONFIGURATION
-                ),
+                    mapping_config=(
+                        ODOO_FIELD_CONFIGURATION
+                    ),
 
-                placement_config=(
-                    placement_config
-                ),
+                    placement_config=(
+                        placement_config
+                    ),
 
-                odoo_header_row=int(
-                    odoo_header_row
-                ),
+                    odoo_header_row=int(
+                        odoo_header_row
+                    ),
 
-                progress=progress_odoo,
+                    progress=(
+                        progress_odoo
+                    ),
 
-                status_display=status_odoo,
+                    status_display=(
+                        status_odoo
+                    ),
+                )
             )
 
             st.session_state.odoo_result = (
@@ -2739,7 +3136,8 @@ else:
             )
 
             st.error(
-                "❌ Erreur pendant la préparation Odoo."
+                "❌ Erreur pendant "
+                "la préparation Odoo."
             )
 
             st.exception(e)
@@ -2753,7 +3151,9 @@ else:
             key="prepare_odoo",
         ):
 
-            st.session_state.odoo_processing = True
+            st.session_state.odoo_processing = (
+                True
+            )
 
             st.rerun()
 
@@ -2774,85 +3174,158 @@ if st.session_state.odoo_result:
         "📊 Résultat Odoo"
     )
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5 = (
+        st.columns(5)
+    )
 
     with c1:
 
         st.metric(
             "Références traitées",
-            f"{stats['processed']:,}",
+            f"{stats.get('processed', 0):,}",
         )
 
     with c2:
 
         st.metric(
             "Lignes mises à jour",
-            f"{stats['updated']:,}",
+            f"{stats.get('updated', 0):,}",
         )
 
     with c3:
 
         st.metric(
             "Nouvelles lignes",
-            f"{stats['created']:,}",
+            f"{stats.get('created', 0):,}",
         )
 
     with c4:
 
         st.metric(
             "Catégories trouvées",
-            f"{stats['category_found']:,}",
+            f"{stats.get('category_found', 0):,}",
         )
 
     with c5:
 
         st.metric(
             "Catégories introuvables",
-            f"{stats['category_missing']:,}",
+            f"{stats.get('category_missing', 0):,}",
         )
 
-    if stats["id_exists"]:
+    # ======================================================
+    # ID ODOO
+    # ======================================================
+
+    if stats.get(
+        "id_exists",
+        False,
+    ):
 
         st.info(
             "ℹ️ Mode import Odoo activé : "
-            "l'ID Odoo existant est conservé."
+            "la colonne « id » a été détectée "
+            "automatiquement et les ID Odoo "
+            "existants sont conservés."
         )
 
     else:
 
         st.info(
-            "ℹ️ Aucune colonne ID Odoo détectée : "
-            "aucun ID existant n'est modifié."
+            "ℹ️ Aucun champ « id » existant "
+            "n'a été détecté dans le fichier Odoo. "
+            "Aucun ID Odoo n'est ajouté artificiellement."
         )
 
-    if stats["category_missing"] > 0:
+    # ======================================================
+    # COLONNES AJOUTEES
+    # ======================================================
+
+    added_columns = (
+        stats.get(
+            "added_odoo_columns",
+            [],
+        )
+    )
+
+    if added_columns:
+
+        st.success(
+            f"➕ "
+            f"{len(added_columns):,} "
+            "colonne(s) Odoo ajoutée(s) : "
+            + ", ".join(
+                added_columns
+            )
+        )
+
+    else:
+
+        st.info(
+            "📋 Aucune nouvelle colonne Odoo "
+            "n'a été nécessaire."
+        )
+
+    # ======================================================
+    # CATEGORIES
+    # ======================================================
+
+    if stats.get(
+        "category_missing",
+        0,
+    ) > 0:
 
         st.warning(
-            f"⚠️ {stats['category_missing']:,} "
+            f"⚠️ "
+            f"{stats.get('category_missing', 0):,} "
             "référence(s) sans catégorie."
         )
 
-    if stats["empty_references"] > 0:
+    # ======================================================
+    # REFERENCES VIDES
+    # ======================================================
+
+    if stats.get(
+        "empty_references",
+        0,
+    ) > 0:
 
         st.warning(
-            f"⚠️ {stats['empty_references']:,} "
+            f"⚠️ "
+            f"{stats.get('empty_references', 0):,} "
             "ligne(s) sans référence."
         )
 
+    # ======================================================
+    # INFORMATIONS
+    # ======================================================
+
     st.info(
-        f"📂 {stats['category_rows']:,} "
+        f"📂 "
+        f"{stats.get('category_rows', 0):,} "
         "lignes de catégories chargées."
     )
 
     st.info(
-        f"🔎 {stats['odoo_indexed']:,} "
+        f"🔎 "
+        f"{stats.get('odoo_indexed', 0):,} "
         "références Odoo indexées."
     )
 
     st.info(
-        f"⏱️ Temps total : "
-        f"{stats['total_time']:.2f} secondes"
+        f"📋 "
+        f"{stats.get('total_odoo_columns', 0):,} "
+        "colonnes dans le fichier Odoo final."
     )
+
+    st.info(
+        f"⏱️ Temps total : "
+        f"{stats.get('total_time', 0):.2f} secondes"
+    )
+
+    # ======================================================
+    # TELECHARGEMENT
+    # ======================================================
 
     st.download_button(
         label=(
