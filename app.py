@@ -24,12 +24,12 @@ from copy import copy
 # ==========================================================
 
 st.set_page_config(
-    page_title="Préparation Heidenhain / Odoo",
+    page_title="Préparation Heidenhain --> Odoo",
     page_icon="📦",
     layout="wide",
 )
 
-st.title("📦 Préparation des prix HEIDENHAIN / Odoo")
+st.title("📦 Préparation des prix HEIDENHAIN --> Odoo")
 
 
 # ==========================================================
