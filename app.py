@@ -13,6 +13,7 @@
 
 import streamlit as st
 import openpyxl
+import time
 
 from io import BytesIO
 from copy import copy
@@ -1166,6 +1167,13 @@ def process_odoo(
     odoo_brand_description,
     odoo_prixHA,
 ):
+    # ======================================================
+    # CHRONOMETRAGE
+    # ======================================================
+
+    start_total = time.perf_counter()
+
+    start_categories = time.perf_counter()
 
     # ======================================================
     # 1. CHARGEMENT DES CATEGORIES
@@ -1189,6 +1197,16 @@ def process_odoo(
         )
     )
 
+    time_categories = (
+    time.perf_counter()
+    - start_categories
+    )
+    
+    st.info(
+        f"⏱️ Chargement catégories : "
+        f"{time_categories:.2f} secondes"
+    )
+
     progress.progress(
         10,
         text=(
@@ -1200,6 +1218,8 @@ def process_odoo(
     # ======================================================
     # 2. OUVERTURE FICHIER HEIDENHAIN
     # ======================================================
+
+    start_heidenhain = time.perf_counter()
 
     heidenhain_file.seek(0)
 
@@ -1227,6 +1247,17 @@ def process_odoo(
     h_ws = wb_h[
         heidenhain_sheet
     ]
+
+    time_heidenhain_load = (
+    time.perf_counter()
+    - start_heidenhain
+    )
+    
+    st.info(
+        f"⏱️ Chargement Heidenhain : "
+        f"{time_heidenhain_load:.2f} secondes"
+    )
+
 
     # ======================================================
     # 3. COLONNES HEIDENHAIN
@@ -1273,6 +1304,7 @@ def process_odoo(
     # ======================================================
     # 4. OUVERTURE ODOO
     # ======================================================
+    start_odoo_load = time.perf_counter()
 
     odoo_file.seek(0)
 
@@ -1300,6 +1332,17 @@ def process_odoo(
     ws = wb_o[
         odoo_sheet
     ]
+
+    time_odoo_load = (
+    time.perf_counter()
+    - start_odoo_load
+    )
+    
+    st.info(
+        f"⏱️ Chargement Odoo : "
+        f"{time_odoo_load:.2f} secondes"
+    )
+
 
     # ======================================================
     # 5. COLONNES ODOO
@@ -1354,6 +1397,7 @@ def process_odoo(
     #
     # Une seule lecture du fichier.
     # ======================================================
+    start_index = time.perf_counter()
 
     reference_index = {}
 
@@ -1384,6 +1428,17 @@ def process_odoo(
                 reference_index[
                     ref
                 ] = row
+    
+    time_index = (
+    time.perf_counter()
+    - start_index
+    )
+    
+    st.info(
+        f"⏱️ Création index Odoo : "
+        f"{time_index:.2f} secondes "
+        f"({len(reference_index):,} références)"
+    )
 
     progress.progress(
         40,
@@ -1510,6 +1565,11 @@ def process_odoo(
     # ======================================================
     # BOUCLE PRINCIPALE
     # ======================================================
+    start_main_loop = time.perf_counter()
+    start_category_search = time.perf_counter()
+    
+    category_search_time = 0
+    category_search_count = 0
 
     for index, row_values in enumerate(
         h_ws.iter_rows(
@@ -1701,12 +1761,21 @@ def process_odoo(
         # Aucun fichier n'est rouvert.
         # ==================================================
 
+        start_cat = time.perf_counter()
+
         category_id = (
             find_category_id_fast(
                 groupe_produit=groupe,
                 category_mapping=category_mapping,
             )
         )
+        
+        category_search_time += (
+            time.perf_counter()
+            - start_cat
+        )
+        
+        category_search_count += 1
 
         if category_id is not None:
 
@@ -1835,6 +1904,22 @@ def process_odoo(
                     f"{category_found:,}"
                 ),
             )
+    
+    time_main_loop = (
+    time.perf_counter()
+    - start_main_loop
+    )
+    
+    st.info(
+        f"⏱️ Traitement Heidenhain → Odoo : "
+        f"{time_main_loop:.2f} secondes"
+    )
+    
+    st.info(
+        f"⏱️ Recherche catégories : "
+        f"{category_search_time:.2f} secondes "
+        f"pour {category_search_count:,} recherches"
+    )
 
     # ======================================================
     # 10. SAUVEGARDE
