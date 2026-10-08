@@ -515,11 +515,6 @@ def process_heidenhain(
         max_row - data_start_row + 1,
     )
 
-    total_rows = max(
-        0,
-        max_row - data_start_row + 1,
-    )
-
     # ======================================================
     # NOUVEAU CLASSEUR
     # ======================================================
@@ -1168,11 +1163,17 @@ def process_odoo(
     odoo_prixHA,
 ):
     # ======================================================
-    # CHRONOMETRAGE
+    # CHRONOMETRES EN DIRECT
     # ======================================================
-
-    start_total = time.perf_counter()
-
+    
+    timer_categories = st.empty()
+    timer_heidenhain = st.empty()
+    timer_odoo = st.empty()
+    timer_index = st.empty()
+    timer_main = st.empty()
+    timer_categories_search = st.empty()
+    
+    # CHRONOMETRAGE
     start_categories = time.perf_counter()
 
     # ======================================================
@@ -1202,10 +1203,6 @@ def process_odoo(
     - start_categories
     )
     
-    st.info(
-        f"⏱️ Chargement catégories : "
-        f"{time_categories:.2f} secondes"
-    )
 
     progress.progress(
         10,
@@ -1404,23 +1401,6 @@ def process_odoo(
     reference_col = odoo_columns[
         odoo_reference_column
     ]
-    st.write("DEBUG référence colonne :", reference_col)
-    st.write("DEBUG max_row Odoo :", ws.max_row)
-    
-    for r in range(
-        int(odoo_header_row) + 1,
-        ws.max_row + 1,
-    ):
-        valeur = ws.cell(
-            row=r,
-            column=reference_col,
-        ).value
-    
-        if valeur not in (None, ""):
-            st.write(
-                f"DEBUG ligne {r} : {valeur}"
-            )
-
 
 
     max_odoo_row = ws.max_row
@@ -1584,7 +1564,6 @@ def process_odoo(
     # BOUCLE PRINCIPALE
     # ======================================================
     start_main_loop = time.perf_counter()
-    start_category_search = time.perf_counter()
     
     category_search_time = 0
     category_search_count = 0
@@ -1922,22 +1901,52 @@ def process_odoo(
                     f"{category_found:,}"
                 ),
             )
+
+            # ==============================================
+            # AFFICHAGE EN DIRECT
+            # ==============================================
+        
+            if index % 100 == 0:
+        
+                now = time.perf_counter()
+        
+                timer_categories.info(
+                    f"⏱️ Catégories : "
+                    f"{time_categories:.2f} s"
+                )
+        
+                timer_heidenhain.info(
+                    f"⏱️ Chargement Heidenhain : "
+                    f"{time_heidenhain_load:.2f} s"
+                )
+        
+                timer_odoo.info(
+                    f"⏱️ Chargement Odoo : "
+                    f"{time_odoo_load:.2f} s"
+                )
+        
+                timer_index.info(
+                    f"⏱️ Index Odoo : "
+                    f"{time_index:.2f} s"
+                )
+        
+                timer_main.info(
+                    f"⏱️ Boucle principale : "
+                    f"{now - start_main_loop:.2f} s"
+                )
+        
+                timer_category_search.info(
+                    f"⏱️ Recherche catégories : "
+                    f"{category_search_time:.2f} s "
+                    f"({category_search_count:,} recherches)"
+                )
+        
+                timer_total.info(
+                    f"⏱️ TOTAL : "
+                    f"{now - start_total:.2f} s"
+                )
+
     
-    time_main_loop = (
-    time.perf_counter()
-    - start_main_loop
-    )
-    
-    st.info(
-        f"⏱️ Traitement Heidenhain → Odoo : "
-        f"{time_main_loop:.2f} secondes"
-    )
-    
-    st.info(
-        f"⏱️ Recherche catégories : "
-        f"{category_search_time:.2f} secondes "
-        f"pour {category_search_count:,} recherches"
-    )
 
     # ======================================================
     # 10. SAUVEGARDE
