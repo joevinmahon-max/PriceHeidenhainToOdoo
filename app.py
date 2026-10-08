@@ -1894,28 +1894,28 @@ def process_odoo(
 
             timer_categories.info(
                 f"⏱️ Catégories : "
-                f"{now - start_categories:.2f} s"
+                f"{time_categories:.2f} s"
             )
-        
+            
             timer_heidenhain.info(
                 f"⏱️ Chargement Heidenhain : "
-                f"{now - start_heidenhain:.2f} s"
+                f"{time_heidenhain_load:.2f} s"
             )
-        
+            
             timer_odoo.info(
                 f"⏱️ Chargement Odoo : "
-                f"{now - start_odoo_load:.2f} s"
+                f"{time_odoo_load:.2f} s"
             )
-        
+            
             timer_index.info(
                 f"⏱️ Index Odoo : "
-                f"{now - start_index:.2f} s "
+                f"{time_index:.2f} s "
                 f"({len(reference_index):,} références)"
             )
-        
+            
             timer_main.info(
                 f"⏱️ Boucle principale : "
-                f"{now - start_main_loop:.2f} s"
+                f"{time.perf_counter() - start_main_loop:.2f} s"
             )
         
 
