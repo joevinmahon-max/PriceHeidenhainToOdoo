@@ -1653,14 +1653,25 @@ if (
         "le fichier Odoo et le fichier catégories."
     )
 else:
-    if st.button(
-        "🚀 Préparer le fichier Odoo",
-        type="primary",
-        use_container_width=True,
-        key="prepare_odoo",
-        disabled=st.session_state.get("Odoo_processing", False),
-    ):
-        st.session_state.Odoo_processing = True
+    if not st.session_state.odoo_processing:
+        if st.button(
+            "🚀 Préparer le fichier Odoo",
+            type="primary",
+            use_container_width=True,
+            key="prepare_odoo",
+        ):
+            st.session_state.odoo_processing = True
+            st.rerun()
+
+    else:
+        st.button(
+            "⏳ Traitement Odoo en cours...",
+            disabled=True,
+            use_container_width=True,
+            key="prepare_odoo_disabled",
+        )
+
+    if st.session_state.odoo_processing:
         progress = st.progress(0, text="Initialisation...")
         status = st.empty()
 
@@ -1696,6 +1707,10 @@ else:
                 "Vérifie les colonnes et leurs emplacements."
             )
             st.exception(exc)
+
+        finally:
+            st.session_state.odoo_processing = False
+            st.rerun()
 
 
 # ==========================================================
