@@ -1216,23 +1216,35 @@ def process_odoo(
                         ),
                     )
             
-            # Supprimer la colonne "id" si elle n'existait pas
-            # dans le fichier Odoo d'origine.
-            if not id_exists:
-                for col in range(ws.max_column, 0, -1):
-                    if normalize(ws.cell(row=header_row, column=col).value) == "id":
-                        ws.delete_cols(col, 1)
-                        st.write("DEBUG - DELETE")
-
-            
-            # DEBUG : vérifier les en-têtes réels avant sauvegarde
-            st.write("DEBUG - En-têtes finaux avant sauvegarde :")
+            # DEBUG suppression de la colonne id
+            st.write("DEBUG - id_exists :", id_exists)
+            st.write("DEBUG - header_row :", header_row)
             
             for col in range(1, ws.max_column + 1):
-                value = ws.cell(row=header_row, column=col).value
-                st.write(f"Colonne {col} : {value!r}")
+                header_value = ws.cell(
+                    row=header_row,
+                    column=col,
+                ).value
             
-            st.write("DEBUG - Nombre de colonnes Excel :", ws.max_column)
+                st.write(
+                    f"DEBUG - Colonne {col} : {header_value!r} "
+                    f"| normalisé : {str(header_value or '').strip().lower()!r}"
+                )
+            
+            if not id_exists:
+                st.warning("DEBUG - Entrée dans le bloc de suppression")
+            
+                for col in range(ws.max_column, 0, -1):
+                    header_value = ws.cell(
+                        row=header_row,
+                        column=col,
+                    ).value
+            
+                    if str(header_value or "").strip().lower() == "id":
+                        st.error(f"DEBUG - Suppression de la colonne {col}")
+                        ws.delete_cols(col, 1)
+            
+            st.write("DEBUG - Nombre de colonnes après suppression :", ws.max_column)
 
             st.stop()
             # --------------------------------------------------
