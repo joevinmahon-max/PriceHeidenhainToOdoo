@@ -83,7 +83,7 @@ REQUIRED_HEIDENHAIN_COLUMNS = [
 
 
 # ==========================================================
-# CORRESPONDANCES ODOO
+# CORRESPONDANCES HEIDENHAIN -> ODOO
 # ==========================================================
 
 ODOO_FIELD_CONFIGURATION = {
@@ -113,7 +113,7 @@ ODOO_FIELD_CONFIGURATION = {
         "fixed": None,
     },
     "x_studio_sales_status": {
-        "label": "Statut commercial",
+        "label": "Sales Status",
         "source": "Statut",
         "fixed": None,
     },
@@ -133,12 +133,12 @@ ODOO_FIELD_CONFIGURATION = {
         "fixed": None,
     },
     "purchase_ok": {
-        "label": "Achat autorisé",
+        "label": "Peut être acheté",
         "source": None,
         "fixed": "VRAI",
     },
     "sale_ok": {
-        "label": "Vente autorisée",
+        "label": "Peut être vendu",
         "source": None,
         "fixed": "VRAI",
     },
@@ -159,6 +159,17 @@ ODOO_FIELD_CONFIGURATION = {
     },
 }
 
+# Sources standards déjà associées à un champ Odoo.
+SOURCE_TO_ODOO = {
+    "ID": "default_code",
+    "Description": "name",
+    "Marque": "x_studio_marque_1",
+    "Statut": "x_studio_sales_status",
+    "Groupe Produit": "categ_id",
+    "Prix (PPC)": "list_price",
+    "Prix (SAV)": "list_price",
+    "Prix HA": "seller_ids/price",
+}
 
 # ==========================================================
 # UTILITAIRES
@@ -294,39 +305,33 @@ def build_required_odoo_columns(
     heidenhain_output_columns,
     mapping_config,
 ):
-    """
-    Conserve les champs Odoo obligatoires et ajoute
-    les colonnes supplémentaires choisies à l'étape 1.
-
-    Une colonne source déjà utilisée par une correspondance
-    n'est pas ajoutée une seconde fois.
-    """
-
     result = []
     seen = set()
-    mapped_sources = set()
-
-    for config in mapping_config.values():
-        source = config.get("source")
-
-        if source and not source.startswith("__"):
-            mapped_sources.add(normalize(source))
 
     def add_column(name):
+        if not name:
+            return
+
         key = normalize(name)
 
-        if key and key not in seen:
+        if key not in seen:
             seen.add(key)
             result.append(name)
 
+    # Tous les champs Odoo standards
     for field in mapping_config:
         add_column(field)
 
-    for field in heidenhain_output_columns:
-        if normalize(field) in mapped_sources:
+    # Toutes les colonnes conservées à l'étape 1
+    # Elles sont ajoutées, même si elles sont inconnues d'Odoo.
+    for name in heidenhain_output_columns:
+        if normalize(name) in {
+            normalize("Prix (PPC)"),
+            normalize("Prix (SAV)"),
+        }:
             continue
 
-        add_column(field)
+        add_column(name)
 
     return result
 
@@ -1373,95 +1378,40 @@ category_search_col = st.sidebar.number_input(
 # ==========================================================
 
 st.sidebar.subheader("🔗 Correspondances Odoo")
-
+# Emplacement par défaut des nouvelles colonnes Odoo
 placement_config = {}
 
 if odoo_file is not None and odoo_detected_columns:
-
     detected_normalized = {
-        normalize(x)
-        for x in odoo_detected_columns
+        normalize(x) for x in odoo_detected_columns
     }
 
-    # Colonnes standard gérées par les correspondances Odoo.
-    standard_columns = set(ODOO_FIELD_CONFIGURATION.keys())
+    required_columns = build_required_odoo_columns(
+        heidenhain_output_columns,
+        ODOO_FIELD_CONFIGURATION,
+    )
 
-    # Toutes les colonnes conservées à l'étape 1.
-    # Les colonnes PPC/SAV restent des colonnes source,
-    # elles ne sont pas ajoutées automatiquement à Odoo
-    # si elles ne sont pas dans la sélection de transfert.
-    transfer_columns = [
-        x for x in heidenhain_output_columns
-        if normalize(x) not in {
-            normalize("Prix (PPC)"),
-            normalize("Prix (SAV)"),
-        }
-    ]
+    for field in required_columns:
+        if normalize(field) not in detected_normalized:
+            # Les colonnes manquantes sont ajoutées à la fin.
+            # Aucune question n'est posée pour les colonnes
+            # supplémentaires telles que ROHS.
+            placement_config[field] = "__END__"
 
-    # Colonnes de transfert absentes d'Odoo.
-    # On exclut les colonnes standard déjà gérées
-    # par ODOO_FIELD_CONFIGURATION.
-    extra_missing_columns = [
-        x for x in transfer_columns
-        if normalize(x) not in detected_normalized
-        and x not in standard_columns
-    ]
-
-    # Champs Odoo standard manquants.
-    missing_standard_columns = [
-        field for field in ODOO_FIELD_CONFIGURATION
+    missing_columns = [
+        field
+        for field in required_columns
         if normalize(field) not in detected_normalized
     ]
 
-    missing_odoo_columns = (
-        missing_standard_columns + extra_missing_columns
-    )
-
-    if missing_odoo_columns:
-
-        st.sidebar.warning(
-            f"⚠️ {len(missing_odoo_columns)} "
-            "colonne(s) à ajouter au fichier Odoo."
+    if missing_columns:
+        st.sidebar.info(
+            f"{len(missing_columns)} colonne(s) seront ajoutées "
+            "automatiquement à la fin du fichier Odoo."
         )
-
-        st.sidebar.caption(
-            "Les colonnes existantes gardent leur ordre. "
-            "Choisissez l'emplacement de chaque nouvelle colonne."
-        )
-
-        placement_options = ["__END__"] + odoo_detected_columns
-
-        placement_labels = {
-            "__END__": "➡️ À la fin des colonnes existantes"
-        }
-
-        placement_labels.update({
-            existing: f"Avant « {existing} »"
-            for existing in odoo_detected_columns
-        })
-
-        for field in missing_odoo_columns:
-
-            if field in ODOO_FIELD_CONFIGURATION:
-                label = ODOO_FIELD_CONFIGURATION[field].get(
-                    "label", field
-                )
-            else:
-                label = "Colonne Heidenhain supplémentaire"
-
-            st.sidebar.markdown(f"**{field}** — {label}")
-
-            placement_config[field] = st.sidebar.selectbox(
-                f"Où placer « {field} » ?",
-                options=placement_options,
-                format_func=lambda x: placement_labels[x],
-                index=0,
-                key=f"placement_{field}",
-            )
-
     else:
         st.sidebar.success(
-            "✅ Toutes les colonnes à transférer existent déjà dans Odoo."
+            "Toutes les colonnes nécessaires sont présentes."
         )
 
 # ==========================================================
@@ -1519,11 +1469,16 @@ else:
             st.exception(exc)
 
 if st.session_state.heidenhain_result is not None:
-    stats = st.session_state.heidenhain_stats
+    stats = st.session_state.heidenhain_stats or {}
+
+    total_columns = stats.get(
+        "total_columns",
+        len(stats.get("columns", [])),
+    )
 
     st.success(
-        f"Fichier créé : {stats['total_columns']} colonnes conservées, "
-        f"{stats['created']} lignes SAV ajoutées."
+        f"Fichier créé : {total_columns} colonnes conservées, "
+        f"{stats.get('created', 0)} lignes SAV ajoutées."
     )
 
     st.download_button(
@@ -1539,7 +1494,7 @@ if st.session_state.heidenhain_result is not None:
     )
 
     with st.expander("Colonnes présentes dans le fichier créé"):
-        st.write(stats["columns"])
+        st.write(stats.get("columns", []))
 
 
 # ==========================================================
