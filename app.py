@@ -959,8 +959,18 @@ def process_odoo(
                 mapping_config,
             )
 
-            st.write("DEBUG - Colonnes Odoo d'origine :", original_headers)
-            st.write("DEBUG - Valeur de id_exists :", id_exists)
+            # DEBUG
+            st.write("DEBUG - Colonnes requises avant correction :", required_odoo_columns)
+            
+            # Retirer uniquement la colonne id si elle est absente du fichier initial.
+            if not id_exists:
+                required_odoo_columns = [
+                    col for col in required_odoo_columns
+                    if normalize(col) != "ID"
+                ]
+            
+            st.write("DEBUG - Colonnes requises après correction :", required_odoo_columns)
+
             
             for source_name, target_name in extra_column_names.items():
                 if not target_name.strip():
