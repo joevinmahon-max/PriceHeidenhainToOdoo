@@ -1373,45 +1373,80 @@ category_search_col = st.sidebar.number_input(
 
 
 # ==========================================================
-# CONFIGURATION DES COLONNES ODOO MANQUANTES
-# Inclut toutes les colonnes conservées à l'étape 1
+# CORRESPONDANCES ODOO : DÉTECTION CORRIGÉE
 # ==========================================================
 
-st.sidebar.subheader("🔗 Correspondances Odoo")
-# Emplacement par défaut des nouvelles colonnes Odoo
 placement_config = {}
 
 if odoo_file is not None and odoo_detected_columns:
-    detected_normalized = {
-        normalize(x) for x in odoo_detected_columns
+
+    odoo_normalized = {
+        normalize(col): col
+        for col in odoo_detected_columns
     }
 
-    required_columns = build_required_odoo_columns(
-        heidenhain_output_columns,
-        ODOO_FIELD_CONFIGURATION,
-    )
+    # Colonnes Heidenhain déjà prises en charge
+    # par les champs Odoo standards.
+    mapped_sources = {
+        normalize(config["source"])
+        for config in ODOO_FIELD_CONFIGURATION.values()
+        if config.get("source")
+        and not config["source"].startswith("__")
+    }
 
-    for field in required_columns:
-        if normalize(field) not in detected_normalized:
-            # Les colonnes manquantes sont ajoutées à la fin.
-            # Aucune question n'est posée pour les colonnes
-            # supplémentaires telles que ROHS.
-            placement_config[field] = "__END__"
-
-    missing_columns = [
+    # Champs techniques Odoo requis.
+    missing_standard = [
         field
-        for field in required_columns
-        if normalize(field) not in detected_normalized
+        for field in ODOO_FIELD_CONFIGURATION
+        if normalize(field) not in odoo_normalized
     ]
 
-    if missing_columns:
-        st.sidebar.info(
-            f"{len(missing_columns)} colonne(s) seront ajoutées "
-            "automatiquement à la fin du fichier Odoo."
+    # Colonnes supplémentaires uniquement :
+    # une colonne déjà mappée vers un champ standard
+    # ne doit pas être comptée comme une colonne supplémentaire.
+    extra_columns = [
+        col
+        for col in heidenhain_output_columns
+        if normalize(col) not in mapped_sources
+        and normalize(col) not in {
+            normalize("Prix (PPC)"),
+            normalize("Prix (SAV)"),
+        }
+    ]
+
+    # Ne garder que les colonnes supplémentaires absentes
+    # du fichier Odoo.
+    missing_extra = [
+        col
+        for col in extra_columns
+        if normalize(col) not in odoo_normalized
+    ]
+
+    # Emplacement automatique en fin de fichier.
+    for field in missing_standard + missing_extra:
+        placement_config[field] = "__END__"
+
+    total_missing = len(missing_standard) + len(missing_extra)
+
+    if total_missing:
+        st.sidebar.warning(
+            f"{total_missing} colonne(s) à ajouter au fichier Odoo : "
+            f"{len(missing_standard)} champ(s) standard et "
+            f"{len(missing_extra)} colonne(s) supplémentaire(s)."
         )
+        if missing_standard:
+            st.sidebar.caption(
+                "Champs Odoo manquants : "
+                + ", ".join(missing_standard)
+            )
+        if missing_extra:
+            st.sidebar.caption(
+                "Colonnes supplémentaires manquantes : "
+                + ", ".join(missing_extra)
+            )
     else:
         st.sidebar.success(
-            "Toutes les colonnes nécessaires sont présentes."
+            "Toutes les colonnes nécessaires sont présentes dans Odoo."
         )
 
 # ==========================================================
