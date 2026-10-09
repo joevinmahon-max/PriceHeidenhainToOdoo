@@ -1369,6 +1369,7 @@ category_search_col = st.sidebar.number_input(
 
 # ==========================================================
 # CONFIGURATION DES COLONNES ODOO MANQUANTES
+# Inclut toutes les colonnes conservées à l'étape 1
 # ==========================================================
 
 st.sidebar.subheader("🔗 Correspondances Odoo")
@@ -1382,30 +1383,53 @@ if odoo_file is not None and odoo_detected_columns:
         for x in odoo_detected_columns
     }
 
-    # Seules les colonnes de destination Odoo
-    # sont concernées par le placement.
-    missing_odoo_columns = [
-        field
-        for field in ODOO_FIELD_CONFIGURATION
+    # Colonnes standard gérées par les correspondances Odoo.
+    standard_columns = set(ODOO_FIELD_CONFIGURATION.keys())
+
+    # Toutes les colonnes conservées à l'étape 1.
+    # Les colonnes PPC/SAV restent des colonnes source,
+    # elles ne sont pas ajoutées automatiquement à Odoo
+    # si elles ne sont pas dans la sélection de transfert.
+    transfer_columns = [
+        x for x in heidenhain_output_columns
+        if normalize(x) not in {
+            normalize("Prix (PPC)"),
+            normalize("Prix (SAV)"),
+        }
+    ]
+
+    # Colonnes de transfert absentes d'Odoo.
+    # On exclut les colonnes standard déjà gérées
+    # par ODOO_FIELD_CONFIGURATION.
+    extra_missing_columns = [
+        x for x in transfer_columns
+        if normalize(x) not in detected_normalized
+        and x not in standard_columns
+    ]
+
+    # Champs Odoo standard manquants.
+    missing_standard_columns = [
+        field for field in ODOO_FIELD_CONFIGURATION
         if normalize(field) not in detected_normalized
     ]
+
+    missing_odoo_columns = (
+        missing_standard_columns + extra_missing_columns
+    )
 
     if missing_odoo_columns:
 
         st.sidebar.warning(
             f"⚠️ {len(missing_odoo_columns)} "
-            "colonne(s) Odoo absente(s)."
+            "colonne(s) à ajouter au fichier Odoo."
         )
 
         st.sidebar.caption(
-            "Les colonnes existantes restent dans leur ordre. "
-            "Seules les nouvelles colonnes Odoo nécessitent "
-            "un emplacement."
+            "Les colonnes existantes gardent leur ordre. "
+            "Choisissez l'emplacement de chaque nouvelle colonne."
         )
 
-        placement_options = ["__END__"] + [
-            existing for existing in odoo_detected_columns
-        ]
+        placement_options = ["__END__"] + odoo_detected_columns
 
         placement_labels = {
             "__END__": "➡️ À la fin des colonnes existantes"
@@ -1418,14 +1442,16 @@ if odoo_file is not None and odoo_detected_columns:
 
         for field in missing_odoo_columns:
 
-            config = ODOO_FIELD_CONFIGURATION[field]
-            label = config.get("label", field)
+            if field in ODOO_FIELD_CONFIGURATION:
+                label = ODOO_FIELD_CONFIGURATION[field].get(
+                    "label", field
+                )
+            else:
+                label = "Colonne Heidenhain supplémentaire"
 
-            st.sidebar.markdown(
-                f"**{field}** — {label}"
-            )
+            st.sidebar.markdown(f"**{field}** — {label}")
 
-            selected = st.sidebar.selectbox(
+            placement_config[field] = st.sidebar.selectbox(
                 f"Où placer « {field} » ?",
                 options=placement_options,
                 format_func=lambda x: placement_labels[x],
@@ -1433,12 +1459,9 @@ if odoo_file is not None and odoo_detected_columns:
                 key=f"placement_{field}",
             )
 
-            placement_config[field] = selected
-
     else:
-
         st.sidebar.success(
-            "✅ Toutes les colonnes Odoo demandées existent déjà."
+            "✅ Toutes les colonnes à transférer existent déjà dans Odoo."
         )
 
 # ==========================================================
