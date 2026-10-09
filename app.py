@@ -356,6 +356,9 @@ def process_heidenhain(
     progress=None,
     status_display=None,
 ):
+    if status_display:
+        status_display.info("📂 Ouverture du fichier Heidenhain...")
+    
     if not output_columns:
         raise ValueError("Sélectionne au moins une colonne.")
 
@@ -406,6 +409,11 @@ def process_heidenhain(
             raise ValueError(
                 "Colonnes Heidenhain introuvables : "
                 + ", ".join(missing)
+            )
+        
+        if status_display:
+            status_display.info(
+                "🔎 Vérification des colonnes et des références..."
             )
 
         required = [
@@ -540,7 +548,12 @@ def process_heidenhain(
                     row=target_row,
                     column=id_out_col,
                 ).value = new_id
-
+        
+        if status_display:
+            status_display.info(
+                "⚙️ Traitement des lignes et détection des statuts VG / PG..."
+            )
+            
         for index, source_row in enumerate(
             range(int(data_start_row), max_row + 1)
         ):
@@ -618,6 +631,9 @@ def process_heidenhain(
 
         output_ws.freeze_panes = "A2"
 
+        if status_display:
+            status_display.info("💾 Création du fichier Excel...")
+            
         result = BytesIO()
         output_wb.save(result)
         result.seek(0)
@@ -648,6 +664,7 @@ def process_heidenhain(
     finally:
         wb_formula.close()
         wb_values.close()
+        st.session_state.heidenhain_processing = False
 
 
 # ==========================================================
@@ -834,7 +851,7 @@ def process_odoo(
     extra_column_names = extra_column_names or {}
 
     if status_display:
-        status_display.info("Chargement des catégories...")
+        status_display.info("⚙️ Chargement des catégories...")
 
     category_mapping, category_rows = load_category_mapping(
         category_file,
@@ -1194,7 +1211,7 @@ def process_odoo(
             # --------------------------------------------------
 
             if status_display:
-                status_display.info("Création du fichier Odoo final...")
+                status_display.info("💾 Création du fichier Odoo final...")
 
             output = BytesIO()
             wb_o.save(output)
@@ -1231,6 +1248,7 @@ def process_odoo(
 
     finally:
         wb_h.close()
+        st.session_state.Odoo_processing = False
 
 
 # ==========================================================
@@ -1544,7 +1562,9 @@ else:
         type="primary",
         use_container_width=True,
         key="create_heidenhain",
+        disabled=st.session_state.get("heidenhain_processing", False),
     ):
+        st.session_state.heidenhain_processing = True
         progress = st.progress(0, text="Initialisation...")
         status = st.empty()
 
@@ -1623,7 +1643,9 @@ else:
         type="primary",
         use_container_width=True,
         key="prepare_odoo",
+        disabled=st.session_state.get("Odoo_processing", False),
     ):
+        st.session_state.Odoo_processing = True
         progress = st.progress(0, text="Initialisation...")
         status = st.empty()
 
