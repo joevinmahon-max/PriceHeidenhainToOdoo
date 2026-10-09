@@ -66,7 +66,6 @@ DEFAULT_HEIDENHAIN_COLUMNS = [
     "Groupe Produit",
     "Prix (PPC)",
     "Prix (SAV)",
-    "Date expiration",
     "Prix HA",
 ]
 
