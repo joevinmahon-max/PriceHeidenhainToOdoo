@@ -318,7 +318,7 @@ def build_required_odoo_columns(
     # Ajouter les champs Odoo standards, sauf l'ID.
     # L'ID doit être conservé uniquement s'il existe déjà dans le modèle.
     for field in mapping_config:
-        if normalize(field) == "ID":
+        if normalize(field) == "id":
             continue
         add_column(field)
 
