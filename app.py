@@ -959,6 +959,13 @@ def process_odoo(
                 mapping_config,
             )
             
+            # Retirer id si absent du fichier modèle Odoo original
+            if not id_exists:
+                required_odoo_columns = [
+                    col for col in required_odoo_columns
+                    if normalize(col) != "ID"
+                ]
+            
             for source_name, target_name in extra_column_names.items():
                 if not target_name.strip():
                     raise ValueError(
@@ -977,18 +984,7 @@ def process_odoo(
                     for col in required_odoo_columns
                 }:
                     required_odoo_columns.append(target_name)
-
-            # Sécurité : ne jamais créer la colonne id si elle
-            # n'existait pas dans le fichier Odoo original.
-            if not id_exists:
-                required_odoo_columns = [
-                    col for col in required_odoo_columns
-                    if normalize(col) != normalize("id")
-                ]
-            
-                placement_config.pop("id", None)
-                placement_config.pop("ID", None)
-                
+                          
             ensure_odoo_columns(
                 ws,
                 header_row,
