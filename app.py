@@ -1368,58 +1368,57 @@ category_search_col = st.sidebar.number_input(
 
 
 # ==========================================================
-# EMPLACEMENT DES COLONNES ODOO MANQUANTES
+# CONFIGURATION DES COLONNES ODOO MANQUANTES
 # ==========================================================
+
+st.sidebar.subheader("🔗 Correspondances Odoo")
 
 placement_config = {}
 
-if (
-    odoo_file is not None
-    and odoo_detected_columns
-    and heidenhain_output_columns
-):
-    required_odoo_columns_ui = build_required_odoo_columns(
-        heidenhain_output_columns,
-        ODOO_FIELD_CONFIGURATION,
-    )
+if odoo_file is not None and odoo_detected_columns:
 
     detected_normalized = {
-        normalize(x) for x in odoo_detected_columns
+        normalize(x)
+        for x in odoo_detected_columns
     }
 
+    # Seules les colonnes de destination Odoo
+    # sont concernées par le placement.
     missing_odoo_columns = [
         field
-        for field in required_odoo_columns_ui
+        for field in ODOO_FIELD_CONFIGURATION
         if normalize(field) not in detected_normalized
     ]
 
-    st.sidebar.divider()
-    st.sidebar.subheader("🔗 Correspondances Odoo")
-
     if missing_odoo_columns:
+
         st.sidebar.warning(
-            f"{len(missing_odoo_columns)} "
-            "colonne(s) doivent être ajoutées."
+            f"⚠️ {len(missing_odoo_columns)} "
+            "colonne(s) Odoo absente(s)."
         )
 
         st.sidebar.caption(
-            "Les colonnes existantes ne seront pas déplacées. "
-            "Choisis l'emplacement de chaque nouvelle colonne."
+            "Les colonnes existantes restent dans leur ordre. "
+            "Seules les nouvelles colonnes Odoo nécessitent "
+            "un emplacement."
         )
 
-        placement_options = [
-            ("__END__", "À la fin des colonnes existantes")
+        placement_options = ["__END__"] + [
+            existing for existing in odoo_detected_columns
         ]
 
-        for existing in odoo_detected_columns:
-            placement_options.append(
-                (existing, f"Avant « {existing} »")
-            )
+        placement_labels = {
+            "__END__": "➡️ À la fin des colonnes existantes"
+        }
 
-        placement_labels = dict(placement_options)
+        placement_labels.update({
+            existing: f"Avant « {existing} »"
+            for existing in odoo_detected_columns
+        })
 
         for field in missing_odoo_columns:
-            config = ODOO_FIELD_CONFIGURATION.get(field, {})
+
+            config = ODOO_FIELD_CONFIGURATION[field]
             label = config.get("label", field)
 
             st.sidebar.markdown(
@@ -1428,58 +1427,19 @@ if (
 
             selected = st.sidebar.selectbox(
                 f"Où placer « {field} » ?",
-                options=[
-                    value for value, _ in placement_options
-                ],
-                format_func=lambda value: placement_labels[value],
+                options=placement_options,
+                format_func=lambda x: placement_labels[x],
                 index=0,
-                key=f"placement_{normalize(field)}",
+                key=f"placement_{field}",
             )
 
             placement_config[field] = selected
 
     else:
+
         st.sidebar.success(
-            "Toutes les colonnes nécessaires existent déjà dans Odoo."
+            "✅ Toutes les colonnes Odoo demandées existent déjà."
         )
-
-    with st.sidebar.expander(
-        "👁️ Voir les correspondances",
-        expanded=False,
-    ):
-        for field, config in ODOO_FIELD_CONFIGURATION.items():
-            source = config.get("source")
-            fixed = config.get("fixed")
-
-            if field == "id":
-                description = "ID Odoo existant conservé"
-            elif source == "__PRICE__":
-                description = (
-                    "Prix (SAV) pour les références _SAV, "
-                    "sinon Prix (PPC)"
-                )
-            elif source == "__BARCODE__":
-                description = "Code créé automatiquement"
-            elif source:
-                description = f"← {source}"
-            elif fixed is not None:
-                description = f"← valeur fixe : {fixed}"
-            else:
-                description = "Valeur existante non écrasée"
-
-            st.write(f"**{field}** : {description}")
-
-        mapped_sources = {
-            normalize(config.get("source"))
-            for config in ODOO_FIELD_CONFIGURATION.values()
-            if config.get("source")
-            and not config.get("source").startswith("__")
-        }
-
-        for name in heidenhain_output_columns:
-            if normalize(name) not in mapped_sources:
-                st.write(f"**{name}** : transfert direct")
-
 
 # ==========================================================
 # ETAPE 1
