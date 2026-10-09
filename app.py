@@ -1224,6 +1224,8 @@ def process_odoo(
                 st.write(f"Colonne {col} : {value!r}")
             
             st.write("DEBUG - Nombre de colonnes Excel :", ws.max_column)
+
+            st.stop()
             # --------------------------------------------------
             # Sauvegarde
             # --------------------------------------------------
