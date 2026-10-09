@@ -954,17 +954,40 @@ def process_odoo(
             # Détection de l'ID avant d'ajouter les champs manquants.
             id_exists = normalize("id") in original_normalized
 
-            required_odoo_columns = build_required_odoo_columns(
-                heidenhain_output_columns,
-                mapping_config,
-            )
+            # Conserver les champs standards uniquement s'ils existent
+            # déjà dans le fichier Odoo d'origine.
+            required_odoo_columns = [
+                field
+                for field in mapping_config
+                if normalize(field) in original_normalized
+            ]
             
-            # Retirer id si absent du fichier modèle Odoo original
-            if not id_exists:
-                required_odoo_columns = [
-                    col for col in required_odoo_columns
-                    if normalize(col) != "ID"
-                ]
+            # Ajouter les colonnes Heidenhain supplémentaires
+            # uniquement si elles ont été configurées explicitement.
+            mapped_sources = {
+                normalize(config.get("source"))
+                for config in mapping_config.values()
+                if config.get("source")
+                and not config["source"].startswith("__")
+            }
+            
+            for name in heidenhain_output_columns:
+                if normalize(name) in mapped_sources:
+                    continue
+            
+                if normalize(name) in {
+                    normalize("Prix (PPC)"),
+                    normalize("Prix (SAV)"),
+                }:
+                    continue
+            
+                target_name = extra_column_names.get(name)
+            
+                if target_name and normalize(target_name) not in {
+                    normalize(col) for col in required_odoo_columns
+                }:
+                    required_odoo_columns.append(target_name)
+            
             
             for source_name, target_name in extra_column_names.items():
                 if not target_name.strip():
