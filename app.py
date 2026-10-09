@@ -1246,7 +1246,6 @@ def process_odoo(
             
             st.write("DEBUG - Nombre de colonnes après suppression :", ws.max_column)
 
-            st.stop()
             # --------------------------------------------------
             # Sauvegarde
             # --------------------------------------------------
