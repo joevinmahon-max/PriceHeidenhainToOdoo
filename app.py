@@ -1228,6 +1228,14 @@ def process_odoo(
                         ),
                     )
 
+            # DEBUG : vérifier les en-têtes réels avant sauvegarde
+            st.write("DEBUG - En-têtes finaux avant sauvegarde :")
+            
+            for col in range(1, ws.max_column + 1):
+                value = ws.cell(row=header_row, column=col).value
+                st.write(f"Colonne {col} : {value!r}")
+            
+            st.write("DEBUG - Nombre de colonnes Excel :", ws.max_column)
             # --------------------------------------------------
             # Sauvegarde
             # --------------------------------------------------
