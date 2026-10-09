@@ -1222,6 +1222,7 @@ def process_odoo(
                 for col in range(ws.max_column, 0, -1):
                     if normalize(ws.cell(row=header_row, column=col).value) == "id":
                         ws.delete_cols(col, 1)
+                        st.write("DEBUG - DELETE")
 
             
             # DEBUG : vérifier les en-têtes réels avant sauvegarde
