@@ -1021,6 +1021,15 @@ def process_odoo(
                 if ref:
                     reference_index.setdefault(ref, row)
 
+            # Ajout TEST
+            if status_display:
+                status_display.info(
+                    f"🔎 {len(reference_index):,} références Odoo indexées "
+                    f"dans la colonne default_code."
+                )
+            # Ajout TEST
+
+            
             # Ajout à la fin : on ne risque pas d'écraser
             # une ligne existante située après un trou.
             next_empty_row = max(
