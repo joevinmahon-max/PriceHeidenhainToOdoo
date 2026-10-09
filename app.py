@@ -962,6 +962,14 @@ def process_odoo(
                 mapping_config,
             )
             
+            # Ne jamais ajouter la colonne ID si elle n'existe pas
+            # déjà dans le fichier modèle Odoo.
+            if not id_exists:
+                required_odoo_columns = [
+                    col for col in required_odoo_columns
+                    if normalize(col) != normalize("id")
+                ]
+            
             for source_name, target_name in extra_column_names.items():
                 if not target_name.strip():
                     raise ValueError(
