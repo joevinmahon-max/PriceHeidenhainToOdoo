@@ -1215,22 +1215,7 @@ def process_odoo(
                             f" | Créations : {created:,}"
                         ),
                     )
-            
-            # DEBUG suppression de la colonne id
-            st.write("DEBUG - id_exists :", id_exists)
-            st.write("DEBUG - header_row :", header_row)
-            
-            for col in range(1, ws.max_column + 1):
-                header_value = ws.cell(
-                    row=header_row,
-                    column=col,
-                ).value
-            
-                st.write(
-                    f"DEBUG - Colonne {col} : {header_value!r} "
-                    f"| normalisé : {str(header_value or '').strip().lower()!r}"
-                )
-            
+           
             if not id_exists:
                 st.warning("DEBUG - Entrée dans le bloc de suppression")
             
@@ -1244,8 +1229,6 @@ def process_odoo(
                         st.error(f"DEBUG - Suppression de la colonne {col}")
                         ws.delete_cols(col, 1)
             
-            st.write("DEBUG - Nombre de colonnes après suppression :", ws.max_column)
-
             # --------------------------------------------------
             # Sauvegarde
             # --------------------------------------------------
