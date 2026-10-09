@@ -1021,21 +1021,19 @@ def process_odoo(
                 if ref:
                     reference_index.setdefault(ref, row)
 
-            # Ajout TEST
-            if status_display:
-                status_display.info(
-                    f"🔎 {len(reference_index):,} références Odoo indexées "
-                    f"dans la colonne default_code."
-                )
-            # Ajout TEST
-
             
-            # Ajout à la fin : on ne risque pas d'écraser
-            # une ligne existante située après un trou.
-            next_empty_row = max(
-                ws.max_row + 1,
-                header_row + 1,
-            )
+            # Première ligne réellement disponible après les données existantes.
+            # Ignore les lignes contenant uniquement du formatage Excel.
+            last_data_row = header_row
+            
+            for row in range(header_row + 1, ws.max_row + 1):
+                if any(
+                    ws.cell(row=row, column=col).value not in (None, "")
+                    for col in range(1, ws.max_column + 1)
+                ):
+                    last_data_row = row
+            
+            next_empty_row = last_data_row + 1
 
             # --------------------------------------------------
             # Détermination des colonnes supplémentaires
