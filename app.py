@@ -315,8 +315,11 @@ def build_required_odoo_columns(
             seen.add(key)
             result.append(name)
 
-    # Ajouter les champs Odoo standards.
+    # Ajouter les champs Odoo standards, sauf l'ID.
+    # L'ID doit être conservé uniquement s'il existe déjà dans le modèle.
     for field in mapping_config:
+        if normalize(field) == "ID":
+            continue
         add_column(field)
 
     # Ajouter uniquement les colonnes Heidenhain
