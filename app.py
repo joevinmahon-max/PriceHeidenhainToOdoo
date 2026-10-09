@@ -978,6 +978,17 @@ def process_odoo(
                 }:
                     required_odoo_columns.append(target_name)
 
+            # Sécurité : ne jamais créer la colonne id si elle
+            # n'existait pas dans le fichier Odoo original.
+            if not id_exists:
+                required_odoo_columns = [
+                    col for col in required_odoo_columns
+                    if normalize(col) != normalize("id")
+                ]
+            
+                placement_config.pop("id", None)
+                placement_config.pop("ID", None)
+                
             ensure_odoo_columns(
                 ws,
                 header_row,
