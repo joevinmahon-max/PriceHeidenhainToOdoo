@@ -308,22 +308,28 @@ def build_required_odoo_columns(
     seen = set()
 
     def add_column(name):
-        if not name:
-            return
-
         key = normalize(name)
-
-        if key not in seen:
+        if key and key not in seen:
             seen.add(key)
             result.append(name)
 
-    # Tous les champs Odoo standards
+    # Ajouter les champs Odoo standards.
     for field in mapping_config:
         add_column(field)
 
-    # Toutes les colonnes conservées à l'étape 1
-    # Elles sont ajoutées, même si elles sont inconnues d'Odoo.
+    # Ajouter uniquement les colonnes Heidenhain
+    # qui ne sont pas déjà associées à un champ Odoo.
+    mapped_sources = {
+        normalize(config.get("source"))
+        for config in mapping_config.values()
+        if config.get("source")
+        and not config["source"].startswith("__")
+    }
+
     for name in heidenhain_output_columns:
+        if normalize(name) in mapped_sources:
+            continue
+
         if normalize(name) in {
             normalize("Prix (PPC)"),
             normalize("Prix (SAV)"),
