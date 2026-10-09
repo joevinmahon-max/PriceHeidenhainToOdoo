@@ -826,10 +826,12 @@ def process_odoo(
     placement_config,
     odoo_header_row,
     heidenhain_output_columns,
+    extra_column_names=None,
     progress=None,
     status_display=None,
 ):
     start_time = time.perf_counter()
+    extra_column_names = extra_column_names or {}
 
     if status_display:
         status_display.info("Chargement des catégories...")
@@ -937,6 +939,25 @@ def process_odoo(
                 heidenhain_output_columns,
                 mapping_config,
             )
+            
+            for source_name, target_name in extra_column_names.items():
+                if not target_name.strip():
+                    raise ValueError(
+                        f"Le nom Odoo de la colonne "
+                        f"« {source_name} » est obligatoire."
+                    )
+
+                required_odoo_columns = [
+                    col
+                    for col in required_odoo_columns
+                    if normalize(col) != normalize(source_name)
+                ]
+
+                if normalize(target_name) not in {
+                    normalize(col)
+                    for col in required_odoo_columns
+                }:
+                    required_odoo_columns.append(target_name)
 
             ensure_odoo_columns(
                 ws,
@@ -1003,6 +1024,10 @@ def process_odoo(
                 name
                 for name in heidenhain_output_columns
                 if normalize(name) not in mapped_sources
+                and normalize(name) not in {
+                    normalize("Prix (PPC)"),
+                    normalize("Prix (SAV)"),
+                }
             ]
 
             processed = 0
@@ -1121,13 +1146,19 @@ def process_odoo(
                 # Transfert des colonnes supplémentaires
                 # --------------------------------------------------
 
-                for name in extra_columns:
-                    source_col = hcol(name)
+                for source_name in extra_columns:
+                    source_col = hcol(source_name)
 
                     if source_col is None:
                         continue
 
-                    target_col = odoo_columns.get(name)
+                    # Utiliser le nom Odoo configuré par l'utilisateur.
+                    target_name = extra_column_names.get(
+                        source_name,
+                        source_name,
+                    )
+
+                    target_col = odoo_columns.get(target_name)
 
                     if target_col is None:
                         continue
@@ -1376,12 +1407,13 @@ category_search_col = st.sidebar.number_input(
     step=1,
 )
 
-
 # ==========================================================
-# CORRESPONDANCES ODOO : DÉTECTION CORRIGÉE
+# CORRESPONDANCES ODOO
+# Renommage des colonnes Heidenhain supplémentaires
 # ==========================================================
 
 placement_config = {}
+extra_column_names = {}
 
 if odoo_file is not None and odoo_detected_columns:
 
@@ -1390,8 +1422,6 @@ if odoo_file is not None and odoo_detected_columns:
         for col in odoo_detected_columns
     }
 
-    # Colonnes Heidenhain déjà prises en charge
-    # par les champs Odoo standards.
     mapped_sources = {
         normalize(config["source"])
         for config in ODOO_FIELD_CONFIGURATION.values()
@@ -1399,16 +1429,12 @@ if odoo_file is not None and odoo_detected_columns:
         and not config["source"].startswith("__")
     }
 
-    # Champs techniques Odoo requis.
     missing_standard = [
         field
         for field in ODOO_FIELD_CONFIGURATION
         if normalize(field) not in odoo_normalized
     ]
 
-    # Colonnes supplémentaires uniquement :
-    # une colonne déjà mappée vers un champ standard
-    # ne doit pas être comptée comme une colonne supplémentaire.
     extra_columns = [
         col
         for col in heidenhain_output_columns
@@ -1419,37 +1445,46 @@ if odoo_file is not None and odoo_detected_columns:
         }
     ]
 
-    # Ne garder que les colonnes supplémentaires absentes
-    # du fichier Odoo.
     missing_extra = [
         col
         for col in extra_columns
         if normalize(col) not in odoo_normalized
     ]
 
-    # Emplacement automatique en fin de fichier.
-    for field in missing_standard + missing_extra:
+    st.sidebar.subheader("🔗 Correspondances Odoo")
+
+    # Champs standards : noms techniques prédéfinis
+    for field in missing_standard:
         placement_config[field] = "__END__"
 
-    total_missing = len(missing_standard) + len(missing_extra)
-
-    if total_missing:
+    # Colonnes supplémentaires : demander le nom Odoo
+    if missing_extra:
         st.sidebar.warning(
-            f"{total_missing} colonne(s) à ajouter au fichier Odoo : "
-            f"{len(missing_standard)} champ(s) standard et "
-            f"{len(missing_extra)} colonne(s) supplémentaire(s)."
+            f"{len(missing_extra)} colonne(s) supplémentaire(s) "
+            "à configurer."
         )
-        if missing_standard:
-            st.sidebar.caption(
-                "Champs Odoo manquants : "
-                + ", ".join(missing_standard)
-            )
-        if missing_extra:
-            st.sidebar.caption(
-                "Colonnes supplémentaires manquantes : "
-                + ", ".join(missing_extra)
-            )
-    else:
+
+        st.sidebar.caption(
+            "Indique le nom de chaque colonne à créer dans le fichier "
+            "Odoo. Le nom proposé par défaut est celui de Heidenhain."
+        )
+
+        for source_name in missing_extra:
+            target_name = st.sidebar.text_input(
+                f"Nom de la colonne Odoo pour « {source_name} »",
+                value=source_name,
+                key=f"odoo_target_name_{normalize(source_name)}",
+                help=(
+                    "Exemple : ROHS → x_studio_rohs. "
+                    "Le nom sera utilisé comme en-tête dans le fichier Excel."
+                ),
+            ).strip()
+
+            if target_name:
+                extra_column_names[source_name] = target_name
+                placement_config[target_name] = "__END__"
+
+    if not missing_standard and not missing_extra:
         st.sidebar.success(
             "Toutes les colonnes nécessaires sont présentes dans Odoo."
         )
@@ -1581,6 +1616,7 @@ else:
                 placement_config=placement_config,
                 odoo_header_row=int(odoo_header_row),
                 heidenhain_output_columns=heidenhain_output_columns,
+                extra_column_names=extra_column_names,
                 progress=progress,
                 status_display=status,
             )
