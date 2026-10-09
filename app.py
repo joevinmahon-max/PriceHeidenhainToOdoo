@@ -1484,7 +1484,7 @@ if odoo_file is not None and odoo_detected_columns:
                 extra_column_names[source_name] = target_name
                 placement_config[target_name] = "__END__"
 
-    if not missing_standard and not missing_extra:
+    if not missing_extra:
         st.sidebar.success(
             "✅ Toutes les correspondances Odoo sont configurées."
         )
