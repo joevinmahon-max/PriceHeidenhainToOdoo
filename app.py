@@ -1486,8 +1486,37 @@ if odoo_file is not None and odoo_detected_columns:
 
     if not missing_standard and not missing_extra:
         st.sidebar.success(
-            "Toutes les colonnes nécessaires sont présentes dans Odoo."
+            "✅ Toutes les correspondances Odoo sont configurées."
         )
+
+        with st.sidebar.expander(
+            "📋 Voir les correspondances actives",
+            expanded=False,
+        ):
+            st.markdown("**Champs standards**")
+
+            for field, config in ODOO_FIELD_CONFIGURATION.items():
+                source = config.get("source")
+                fixed = config.get("fixed")
+
+                if source == "__PRICE__":
+                    origine = "Prix PPC / SAV"
+                elif source == "__BARCODE__":
+                    origine = "Code-barres calculé"
+                elif source:
+                    origine = source
+                elif fixed is not None:
+                    origine = f"Valeur fixe : {fixed}"
+                else:
+                    origine = "ID Odoo conservé"
+
+                st.write(f"**{field}** ← {origine}")
+
+            if extra_column_names:
+                st.markdown("**Colonnes supplémentaires**")
+
+                for source_name, target_name in extra_column_names.items():
+                    st.write(f"**{target_name}** ← {source_name}")
 
 # ==========================================================
 # ETAPE 1
