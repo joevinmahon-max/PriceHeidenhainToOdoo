@@ -986,6 +986,13 @@ def process_odoo(
                 placement_config,
             )
 
+            # Supprimer la colonne "id" si elle n'existait pas
+            # dans le fichier Odoo d'origine.
+            if not id_exists:
+                for col in range(ws.max_column, 0, -1):
+                    if normalize(ws.cell(row=header_row, column=col).value) == "id":
+                        ws.delete_cols(col, 1)
+
             odoo_columns = find_columns(
                 ws,
                 header_row,
