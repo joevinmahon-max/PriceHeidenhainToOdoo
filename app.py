@@ -1562,7 +1562,7 @@ else:
         type="primary",
         use_container_width=True,
         key="create_heidenhain",
-        disabled=st.session_state.get("heidenhain_processing", False),
+        disabled=st.session_state.get("heidenhain_processing", True),
     ):
         st.session_state.heidenhain_processing = True
         progress = st.progress(0, text="Initialisation...")
