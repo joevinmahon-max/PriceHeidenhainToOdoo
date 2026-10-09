@@ -959,14 +959,6 @@ def process_odoo(
                 mapping_config,
             )
 
-            # Ne jamais créer la colonne "id" si elle est absente
-            # du fichier Odoo d'origine.
-            if not id_exists:
-                required_odoo_columns = [
-                    col for col in required_odoo_columns
-                    if normalize(col) != normalize("id")
-                ]
-
             st.write("DEBUG - Colonnes Odoo d'origine :", original_headers)
             st.write("DEBUG - Valeur de id_exists :", id_exists)
             
