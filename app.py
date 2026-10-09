@@ -45,6 +45,8 @@ DEFAULT_STATE = {
     "heidenhain_stats": None,
     "odoo_result": None,
     "odoo_stats": None,
+    "heidenhain_processing": False,
+    "odoo_processing": False,
 }
 
 for key, value in DEFAULT_STATE.items():
@@ -1557,17 +1559,28 @@ else:
         )
     )
 
-    if st.button(
-        "🚀 Créer le fichier Heidenhain",
-        type="primary",
-        use_container_width=True,
-        key="create_heidenhain",
-        disabled=st.session_state.get("heidenhain_processing", True),
-    ):
-        st.session_state.heidenhain_processing = True
+    if not st.session_state.heidenhain_processing:
+        if st.button(
+            "🚀 Créer le fichier Heidenhain",
+            type="primary",
+            use_container_width=True,
+            key="create_heidenhain",
+        ):
+            st.session_state.heidenhain_processing = True
+            st.rerun()
+    
+    else:
+        st.button(
+            "⏳ Traitement Heidenhain en cours...",
+            disabled=True,
+            use_container_width=True,
+            key="create_heidenhain_disabled",
+        )
+    
+    if st.session_state.heidenhain_processing:
         progress = st.progress(0, text="Initialisation...")
         status = st.empty()
-
+    
         try:
             result, stats = process_heidenhain(
                 uploaded_file=heidenhain_file,
@@ -1580,17 +1593,19 @@ else:
                 progress=progress,
                 status_display=status,
             )
-
+    
             st.session_state.heidenhain_result = result
             st.session_state.heidenhain_stats = stats
-
-            # Invalider le résultat Odoo après une nouvelle étape 1.
             st.session_state.odoo_result = None
             st.session_state.odoo_stats = None
-
+    
         except Exception as exc:
             st.error(f"Erreur pendant la préparation Heidenhain : {exc}")
             st.exception(exc)
+    
+        finally:
+            st.session_state.heidenhain_processing = False
+            st.rerun()
 
 if st.session_state.heidenhain_result is not None:
     stats = st.session_state.heidenhain_stats or {}
