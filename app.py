@@ -1415,6 +1415,8 @@ category_search_col = st.sidebar.number_input(
 placement_config = {}
 extra_column_names = {}
 
+st.sidebar.subheader("🔗 Correspondances Odoo")
+
 if odoo_file is not None and odoo_detected_columns:
 
     odoo_normalized = {
@@ -1450,8 +1452,6 @@ if odoo_file is not None and odoo_detected_columns:
         for col in extra_columns
         if normalize(col) not in odoo_normalized
     ]
-
-    st.sidebar.subheader("🔗 Correspondances Odoo")
 
     # Champs standards : noms techniques prédéfinis
     for field in missing_standard:
