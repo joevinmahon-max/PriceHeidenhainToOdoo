@@ -1011,7 +1011,9 @@ def process_odoo(
                 )
 
             if status_display:
-                status_display.info("⚙️ Traitement du fichier..")
+                status_display.info("⚙️ Préparation du traitement...")
+            if progress:
+                progress.progress(0, text="Initialisation et indexation Odoo...")
             
             # --------------------------------------------------
             # Index des références Odoo
@@ -1019,22 +1021,40 @@ def process_odoo(
 
             reference_col = odoo_columns["default_code"]
             reference_index = {}
-
+            
+            total_odoo_rows = max(1, ws.max_row - header_row)
+            
             for row in range(header_row + 1, ws.max_row + 1):
                 value = ws.cell(
                     row=row,
                     column=reference_col,
                 ).value
-
+            
                 ref = clean_reference(value)
-
+            
                 if ref:
                     reference_index.setdefault(ref, row)
+            
+                if progress and (
+                    row % 100 == 0
+                    or row == ws.max_row
+                ):
+                    pct = int(
+                        50 * (row - header_row) / total_odoo_rows
+                    )
+            
+                    progress.progress(
+                        min(pct, 50),
+                        text=f"Indexation Odoo : {row - header_row:,} / {total_odoo_rows:,}",
+                    )
 
             
             # Première ligne réellement disponible après les données existantes.
             # Ignore les lignes contenant uniquement du formatage Excel.
             last_data_row = header_row
+            
+            last_data_row = header_row
+            total_scan_rows = max(1, ws.max_row - header_row)
             
             for row in range(header_row + 1, ws.max_row + 1):
                 if any(
@@ -1042,6 +1062,19 @@ def process_odoo(
                     for col in range(1, ws.max_column + 1)
                 ):
                     last_data_row = row
+            
+                if progress and (
+                    row % 100 == 0
+                    or row == ws.max_row
+                ):
+                    pct = 50 + int(
+                        10 * (row - header_row) / total_scan_rows
+                    )
+            
+                    progress.progress(
+                        min(pct, 60),
+                        text=f"Recherche des données existantes : {row - header_row:,} / {total_scan_rows:,}",
+                    )
             
             next_empty_row = last_data_row + 1
 
@@ -1209,21 +1242,21 @@ def process_odoo(
                 # --------------------------------------------------
 
                 if progress and (
-                    index % 25 == 0
-                    or index == total_rows - 1
-                ):
-                    pct = 10 + int(
-                        80 * (index + 1) / max(1, total_rows)
-                    )
-
-                    progress.progress(
-                        min(pct, 90),
-                        text=(
-                            f"Odoo : {index + 1:,} / {total_rows:,}"
-                            f" | Mises à jour : {updated:,}"
-                            f" | Créations : {created:,}"
-                        ),
-                    )
+                index % 25 == 0
+                or index == total_rows - 1
+            ):
+                pct = 60 + int(
+                    30 * (index + 1) / max(1, total_rows)
+                )
+            
+                progress.progress(
+                    min(pct, 90),
+                    text=(
+                        f"Heidenhain : {index + 1:,} / {total_rows:,}"
+                        f" | Mises à jour : {updated:,}"
+                        f" | Créations : {created:,}"
+                    ),
+                )
            
             if not id_exists:
                 st.warning("DEBUG - Entrée dans le bloc de suppression")
@@ -1608,8 +1641,8 @@ else:
         )
     
     if st.session_state.heidenhain_processing:
-        progress = st.progress(0, text="Initialisation...")
-        status = st.empty()
+    progress = st.progress(0)
+    status = st.empty()
     
         try:
             result, stats = process_heidenhain(
