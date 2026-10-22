@@ -1,6 +1,6 @@
 # ==========================================================
 # PREPARATION PRIX HEIDENHAIN -> ODOO
-# JMA
+# JMA 22-10-2026
 #
 # - Detection automatique des colonnes
 # - Colonnes Heidenhain sélectionnables
