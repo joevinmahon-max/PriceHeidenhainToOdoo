@@ -36,6 +36,43 @@ st.set_page_config(
 st.title("📦 Préparation des prix HEIDENHAIN → Odoo")
 
 
+st.markdown("""
+## ℹ️ Fonctionnement de l'application
+
+Cette application automatise la préparation des fichiers produits HEIDENHAIN
+avant leur importation dans Odoo.
+
+### 1️⃣ Préparation du fichier HEIDENHAIN
+- Détection automatique des colonnes et sélection des données à conserver.
+- Conservation des références et des prix PPC, SAV et HA.
+- Création automatique des produits SAV pour les références ayant le statut
+  VG ou PG, avec ajout du suffixe `_SAV`.
+- Vérification des références SAV pour éviter les doublons.
+
+### 2️⃣ Préparation du fichier Odoo
+- Recherche des produits existants à partir de leur référence interne
+  (`default_code`).
+- **Produits existants :** mise à jour de leur ligne sans modifier leur ID Odoo.
+- **Nouveaux produits :** ajout sur une nouvelle ligne après les données existantes.
+- Mise à jour des noms, marques, statuts, prix, fournisseurs et catégories.
+- Conservation de la catégorie existante lorsqu'aucune correspondance n'est trouvée.
+- Ajout automatique des colonnes Odoo manquantes et transfert des colonnes
+  supplémentaires sélectionnées.
+- Nettoyage des espaces superflus dans les valeurs textuelles transférées.
+
+### 3️⃣ Résultat final
+Un fichier Excel prêt à être importé dans Odoo est généré, accompagné
+d'un récapitulatif des produits traités, mis à jour ou créés, ainsi que
+des correspondances de catégories trouvées ou manquantes.
+
+⚠️ **Important :** vérifiez le fichier final avant son importation dans Odoo,
+notamment les références, les prix, les catégories et les champs personnalisés.
+""")
+
+st.divider()
+
+
+
 # ==========================================================
 # SESSION STATE
 # ==========================================================
