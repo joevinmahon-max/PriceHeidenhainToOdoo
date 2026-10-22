@@ -29,11 +29,11 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Préparation Heidenhain vers Odoo",
-    page_icon="📦",
+    page_icon="⚙️",
     layout="wide",
 )
 
-st.title("📦 Préparation des prix HEIDENHAIN → Odoo")
+st.title("⚙️ Préparation des prix HEIDENHAIN → Odoo")
 
 
 st.markdown("""
