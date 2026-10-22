@@ -182,6 +182,18 @@ def normalize(value):
     return str(value).strip().upper()
 
 
+def clean_cell_value(value):
+    """Nettoie les espaces superflus sans modifier les nombres."""
+    if not isinstance(value, str):
+        return value
+
+    return (
+        value
+        .replace("\u00A0", " ")   # Espace insécable
+        .replace("\u202F", " ")   # Espace insécable étroit
+        .strip()                  # Début et fin
+    )
+
 def clean_reference(value):
     return normalize(value)
 
@@ -1190,7 +1202,7 @@ def process_odoo(
                         )
 
                     elif source is not None:
-                        value = source_value(source)
+                        value = clean_cell_value(source_value(source))
 
                         if normalize(field) == normalize("categ_id/id"):
                             # Ne pas effacer une catégorie existante
@@ -1205,7 +1217,7 @@ def process_odoo(
                     ws.cell(
                         row=target_row,
                         column=target_col,
-                    ).value = value
+                    ).value = clean_cell_value(row_values[source_col - 1])
 
                 # --------------------------------------------------
                 # Transfert des colonnes supplémentaires
