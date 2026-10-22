@@ -862,6 +862,9 @@ def process_odoo(
         category_search_col,
     )
 
+    if status_display:
+        status_display.info("📂 Ouverture du fichier Heidenhain Préparé..")
+        
     # ------------------------------------------------------
     # Lecture du fichier Heidenhain préparé
     # ------------------------------------------------------
@@ -926,6 +929,9 @@ def process_odoo(
                 + ", ".join(missing_selected)
             )
 
+        if status_display:
+            status_display.info("📂 Ouverture du fichier ODOO..")
+        
         # --------------------------------------------------
         # Ouverture du fichier Odoo
         # --------------------------------------------------
@@ -1004,6 +1010,9 @@ def process_odoo(
                     + ", ".join(missing_odoo)
                 )
 
+            if status_display:
+                status_display.info("⚙️ Traitement du fichier..")
+            
             # --------------------------------------------------
             # Index des références Odoo
             # --------------------------------------------------
