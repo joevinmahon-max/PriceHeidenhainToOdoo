@@ -1024,59 +1024,55 @@ def process_odoo(
             
             total_odoo_rows = max(1, ws.max_row - header_row)
             
-            for row in range(header_row + 1, ws.max_row + 1):
+            for index, (value,) in enumerate(
+                ws.iter_rows(
+                    min_row=header_row + 1,
+                    max_row=ws.max_row,
+                    min_col=reference_col,
+                    max_col=reference_col,
+                    values_only=True,
+                ),
+                start=1,
+            ):
+                ref = clean_reference(value)
+            
+                if ref:
+                    reference_index.setdefault(ref, header_row + index)
+            
+                if progress and (
+                    index % 100 == 0
+                    or index == total_odoo_rows
+                ):
+                    pct = int(50 * index / total_odoo_rows)
+            
+                    progress.progress(
+                        min(pct, 50),
+                        text=f"Indexation Odoo : {index:,} / {total_odoo_rows:,}",
+                    )
+            
+            # --------------------------------------------------
+            # Recherche de la dernière ligne existante
+            # --------------------------------------------------
+            
+            last_data_row = header_row
+            
+            for row in range(ws.max_row, header_row, -1):
                 value = ws.cell(
                     row=row,
                     column=reference_col,
                 ).value
             
-                ref = clean_reference(value)
-            
-                if ref:
-                    reference_index.setdefault(ref, row)
-            
-                if progress and (
-                    row % 100 == 0
-                    or row == ws.max_row
-                ):
-                    pct = int(
-                        50 * (row - header_row) / total_odoo_rows
-                    )
-            
-                    progress.progress(
-                        min(pct, 50),
-                        text=f"Indexation Odoo : {row - header_row:,} / {total_odoo_rows:,}",
-                    )
-
-            
-            # Première ligne réellement disponible après les données existantes.
-            # Ignore les lignes contenant uniquement du formatage Excel.
-            last_data_row = header_row
-            
-            last_data_row = header_row
-            total_scan_rows = max(1, ws.max_row - header_row)
-            
-            for row in range(header_row + 1, ws.max_row + 1):
-                if any(
-                    ws.cell(row=row, column=col).value not in (None, "")
-                    for col in range(1, ws.max_column + 1)
-                ):
+                if value not in (None, ""):
                     last_data_row = row
-            
-                if progress and (
-                    row % 100 == 0
-                    or row == ws.max_row
-                ):
-                    pct = 50 + int(
-                        10 * (row - header_row) / total_scan_rows
-                    )
-            
-                    progress.progress(
-                        min(pct, 60),
-                        text=f"Recherche des données existantes : {row - header_row:,} / {total_scan_rows:,}",
-                    )
+                    break
             
             next_empty_row = last_data_row + 1
+            
+            if progress:
+                progress.progress(
+                    60,
+                    text="Recherche des données existantes terminée",
+                )
 
             # --------------------------------------------------
             # Détermination des colonnes supplémentaires
