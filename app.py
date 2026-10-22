@@ -1437,14 +1437,14 @@ category_sheet = st.sidebar.text_input(
 category_id_col = st.sidebar.number_input(
     "Numéro de colonne ID catégorie",
     min_value=1,
-    value=2,
+    value=1,
     step=1,
 )
 
 category_search_col = st.sidebar.number_input(
     "Numéro de colonne nom catégorie",
     min_value=1,
-    value=3,
+    value=2,
     step=1,
 )
 
