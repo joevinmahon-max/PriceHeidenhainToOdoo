@@ -1217,7 +1217,7 @@ def process_odoo(
                     ws.cell(
                         row=target_row,
                         column=target_col,
-                    ).value = clean_cell_value(row_values[source_col - 1])
+                    ).value = clean_cell_value(value)
 
                 # --------------------------------------------------
                 # Transfert des colonnes supplémentaires
