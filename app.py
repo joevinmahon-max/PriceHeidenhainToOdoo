@@ -1641,8 +1641,8 @@ else:
         )
     
     if st.session_state.heidenhain_processing:
-    progress = st.progress(0)
-    status = st.empty()
+        progress = st.progress(0)
+        status = st.empty()
     
         try:
             result, stats = process_heidenhain(
