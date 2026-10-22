@@ -1242,21 +1242,21 @@ def process_odoo(
                 # --------------------------------------------------
 
                 if progress and (
-                index % 25 == 0
-                or index == total_rows - 1
-            ):
-                pct = 60 + int(
-                    30 * (index + 1) / max(1, total_rows)
-                )
-            
-                progress.progress(
-                    min(pct, 90),
-                    text=(
-                        f"Heidenhain : {index + 1:,} / {total_rows:,}"
-                        f" | Mises à jour : {updated:,}"
-                        f" | Créations : {created:,}"
-                    ),
-                )
+                    index % 25 == 0
+                    or index == total_rows - 1
+                ):
+                    pct = 60 + int(
+                        30 * (index + 1) / max(1, total_rows)
+                    )
+                
+                    progress.progress(
+                        min(pct, 90),
+                        text=(
+                            f"Heidenhain : {index + 1:,} / {total_rows:,}"
+                            f" | Mises à jour : {updated:,}"
+                            f" | Créations : {created:,}"
+                        ),
+                    )
            
             if not id_exists:
                 st.warning("DEBUG - Entrée dans le bloc de suppression")
