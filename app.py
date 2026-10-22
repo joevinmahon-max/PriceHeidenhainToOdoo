@@ -108,7 +108,7 @@ ODOO_FIELD_CONFIGURATION = {
         "source": "Marque",
         "fixed": None,
     },
-    "categ_id": {
+    "categ_id/id": {
         "label": "Catégorie",
         "source": "Groupe Produit",
         "fixed": None,
@@ -166,7 +166,7 @@ SOURCE_TO_ODOO = {
     "Description": "name",
     "Marque": "x_studio_marque_1",
     "Statut": "x_studio_sales_status",
-    "Groupe Produit": "categ_id",
+    "Groupe Produit": "categ_id/id",
     "Prix (PPC)": "list_price",
     "Prix (SAV)": "list_price",
     "Prix HA": "seller_ids/price",
@@ -1163,7 +1163,7 @@ def process_odoo(
                     elif source is not None:
                         value = source_value(source)
 
-                        if normalize(field) == normalize("categ_id"):
+                        if normalize(field) == normalize("categ_id/id"):
                             # Ne pas effacer une catégorie existante
                             # si aucune correspondance n'est trouvée.
                             if category_id is None:
