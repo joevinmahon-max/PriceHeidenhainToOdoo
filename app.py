@@ -1167,7 +1167,7 @@ def process_odoo(
                 id_value = row_values[id_index]
 
                 if id_value in (None, ""):
-                    break
+                    continue
 
                 reference = str(id_value).strip()
 
